@@ -152,42 +152,42 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 border-r border-gray-800 text-gray-300">
+    <div className="flex flex-col h-full bg-background border-r border-border text-foreground">
       {/* Toolbar */}
-      <div className="p-2 border-b border-gray-800 flex items-center gap-1 bg-gray-950">
-        <button onClick={handleUp} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white" title="Up">
+      <div className="p-2 border-b border-border flex items-center gap-1 bg-card">
+        <button onClick={handleUp} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Up">
             <ArrowUp className="w-4 h-4" />
         </button>
-        <div className="flex-1 mx-2 bg-gray-900 border border-gray-800 rounded px-2 py-1 text-xs font-mono truncate">
+        <div className="flex-1 mx-2 bg-background border border-border rounded px-2 py-1 text-xs font-mono truncate text-foreground">
             {currentPath}
         </div>
-        <button onClick={() => loadFiles(currentPath)} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white" title="Refresh">
+        <button onClick={() => loadFiles(currentPath)} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
-        <button onClick={handleCreateFolder} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white" title="New Folder">
+        <button onClick={handleCreateFolder} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="New Folder">
           <FolderPlus className="w-4 h-4" />
         </button>
-        <button onClick={handleUpload} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white" title="Upload">
+        <button onClick={handleUpload} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Upload">
           <Upload className="w-4 h-4" />
         </button>
       </div>
 
       {/* File List */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto bg-background">
         <div className="flex flex-col">
             {files.map((file, i) => (
             <div 
                 key={i}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-800 cursor-pointer text-sm group"
+                className="flex items-center gap-2 px-3 py-2 hover:bg-secondary cursor-pointer text-sm group transition-colors"
                 onDoubleClick={() => file.type === 'd' && handleNavigate(file)}
                 onContextMenu={(e) => onContextMenu(e, file)}
             >
                 {file.type === 'd' ? 
                     <Folder className="w-4 h-4 text-blue-400 shrink-0" /> : 
-                    <File className="w-4 h-4 text-gray-500 shrink-0" />
+                    <File className="w-4 h-4 text-muted-foreground shrink-0" />
                 }
-                <span className="truncate flex-1">{file.name}</span>
-                <span className="text-xs text-gray-600 w-16 text-right tabular-nums">
+                <span className="truncate flex-1 text-foreground">{file.name}</span>
+                <span className="text-xs text-muted-foreground w-16 text-right tabular-nums">
                     {file.type === '-' ? (file.size < 1024 ? `${file.size} B` : `${(file.size/1024).toFixed(1)} KB`) : ''}
                 </span>
             </div>
@@ -198,19 +198,19 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
       {/* Context Menu */}
       {contextMenu && (
           <div 
-            className="fixed bg-gray-800 border border-gray-700 shadow-xl rounded py-1 z-50 w-40"
+            className="fixed bg-popover border border-border shadow-xl rounded py-1 z-50 w-40 text-popover-foreground"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
-              <div className="px-3 py-1 text-xs text-gray-500 border-b border-gray-700 mb-1 truncate">
+              <div className="px-3 py-1 text-xs text-muted-foreground border-b border-border mb-1 truncate">
                   {contextMenu.file.name}
               </div>
-              <button onClick={() => handleDownload(contextMenu.file)} className="w-full text-left px-3 py-1.5 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+              <button onClick={() => handleDownload(contextMenu.file)} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm">
                   <Download className="w-3 h-3" /> Download
               </button>
-              <button onClick={() => handleRename(contextMenu.file)} className="w-full text-left px-3 py-1.5 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+              <button onClick={() => handleRename(contextMenu.file)} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm">
                   <Edit2 className="w-3 h-3" /> Rename
               </button>
-              <button onClick={() => handleDelete(contextMenu.file)} className="w-full text-left px-3 py-1.5 hover:bg-red-900/30 text-red-400 flex items-center gap-2 text-sm">
+              <button onClick={() => handleDelete(contextMenu.file)} className="w-full text-left px-3 py-1.5 hover:bg-destructive/10 text-destructive flex items-center gap-2 text-sm">
                   <Trash2 className="w-3 h-3" /> Delete
               </button>
           </div>

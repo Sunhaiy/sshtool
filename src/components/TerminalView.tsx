@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { useThemeStore } from '../store/themeStore';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -10,6 +11,18 @@ interface TerminalViewProps {
 export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const { theme } = useThemeStore();
+
+  useEffect(() => {
+    if (!termRef.current) return;
+    
+    // Update terminal theme when app theme changes
+    termRef.current.options.theme = {
+      ...theme.terminal,
+      selection: theme.terminal.selectionBackground
+    };
+    termRef.current.options.fontFamily = theme.fontFamily;
+  }, [theme]);
 
   useEffect(() => {
     if (!containerRef.current || !connectionId) return;
@@ -17,9 +30,10 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: theme.fontFamily,
       theme: {
-        background: '#1e1e1e',
+        ...theme.terminal,
+        selection: theme.terminal.selectionBackground
       }
     });
     
@@ -63,7 +77,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       window.removeEventListener('resize', handleResize);
       term.dispose();
     };
-  }, [connectionId]);
+  }, [connectionId]); // Removed 'theme' from dependency array to prevent re-creation
 
-  return <div ref={containerRef} className="h-full w-full bg-[#1e1e1e]" />;
+  return <div ref={containerRef} className="h-full w-full" style={{ background: theme.terminal.background }} />;
 }

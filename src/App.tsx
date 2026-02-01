@@ -9,21 +9,17 @@ import { Settings } from './pages/Settings';
 import { SSHConnection } from './shared/types';
 import { Button } from './components/ui/button';
 import { Home } from 'lucide-react';
+import { useThemeStore } from './store/themeStore';
 
 function App() {
   const [page, setPage] = useState<'connections' | 'workspace' | 'settings'>('connections');
   const [activeConnection, setActiveConnection] = useState<SSHConnection | null>(null);
+  const initTheme = useThemeStore(state => state.initTheme);
 
   // Load theme on startup
   useEffect(() => {
-    window.electron.storeGet('theme').then(theme => {
-      if (theme === 'light') {
-        document.documentElement.classList.remove('dark');
-      } else {
-        document.documentElement.classList.add('dark');
-      }
-    });
-  }, []);
+    initTheme();
+  }, [initTheme]);
 
   const handleConnect = async (connection: SSHConnection) => {
     const result = await window.electron.connectSSH(connection);
