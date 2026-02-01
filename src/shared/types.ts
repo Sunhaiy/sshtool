@@ -4,23 +4,55 @@ export interface SSHConnection {
   host: string;
   port: number;
   username: string;
-  authType: 'password' | 'key';
+  authType: 'password' | 'privateKey';
   password?: string;
   privateKeyPath?: string;
 }
 
-export interface SystemStats {
-  cpu: number;
-  memory: {
-    used: number;
-    total: number;
-    percentage: number;
-  };
-}
-
 export interface FileEntry {
   name: string;
-  type: 'd' | '-'; // directory or file
+  type: 'd' | '-';
   size: number;
   date: string;
+}
+
+export interface CpuCore {
+  id: number;
+  usage: number;
+}
+
+export interface SystemStats {
+  os: {
+    distro: string;
+    kernel: string;
+    uptime: string;
+    hostname: string;
+  };
+  cpu: {
+    totalUsage: number;
+    cores: CpuCore[];
+    model: string;
+    speed: string;
+  };
+  memory: {
+    total: number;
+    used: number;
+    free: number;
+    cached: number;
+    buffers: number;
+  };
+  network: {
+    upSpeed: number; // bytes/sec
+    downSpeed: number; // bytes/sec
+    totalTx: number;
+    totalRx: number;
+  };
+  disks: {
+    filesystem: string;
+    size: number;
+    used: number;
+    available: number;
+    usePercent: number;
+    mount: string;
+  }[];
 }
