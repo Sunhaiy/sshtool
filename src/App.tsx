@@ -1,3 +1,5 @@
+
+
 import { useState, useEffect } from 'react';
 import { TerminalView } from './components/TerminalView';
 import { FileBrowser } from './components/FileBrowser';
@@ -7,83 +9,129 @@ import { TitleBar } from './components/TitleBar';
 import { ConnectionManager } from './pages/ConnectionManager';
 import { Settings } from './pages/Settings';
 import { SSHConnection } from './shared/types';
-import { Button } from './components/ui/button';
-import { Home } from 'lucide-react';
+import { SessionTabs, Session } from './components/SessionTabs';
+import { ResizableLayout } from './components/ResizableLayout';
 import { useThemeStore } from './store/themeStore';
+import { useSettingsStore } from './store/settingsStore';
 
 function App() {
   const [page, setPage] = useState<'connections' | 'workspace' | 'settings'>('connections');
-  const [activeConnection, setActiveConnection] = useState<SSHConnection | null>(null);
-  const initTheme = useThemeStore(state => state.initTheme);
+  // Multi-session state
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  // Load theme on startup
+  const initTheme = useThemeStore(state => state.initTheme);
+  const { initSettings, fontFamily } = useSettingsStore();
+
   useEffect(() => {
     initTheme();
-  }, [initTheme]);
+    initSettings();
+  }, [initTheme, initSettings]);
+
+  useEffect(() => {
+    document.body.style.fontFamily = fontFamily;
+  }, [fontFamily]);
 
   const handleConnect = async (connection: SSHConnection) => {
-    const result = await window.electron.connectSSH(connection);
+    // Create new session
+    const uniqueId = Date.now().toString();
+    const result = await window.electron.connectSSH({ ...connection, id: uniqueId }); // Use unique ID for this session
+
     if (result.success) {
-      setActiveConnection(connection);
+      const newSession: Session = { uniqueId, connection };
+      setSessions(prev => [...prev, newSession]);
+      setActiveSessionId(uniqueId);
       setPage('workspace');
     } else {
       alert('Connection failed: ' + result.error);
     }
   };
 
-  const handleDisconnect = () => {
-    setActiveConnection(null);
-    setPage('connections');
-    // Logic to disconnect SSH if needed via IPC
+  const handleCloseSession = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    // Disconnect SSH
+    // await window.electron.disconnectSSH(id); // Assuming this API exists, otherwise connection drops naturally or we need to add it
+
+    setSessions(prev => {
+      const newSessions = prev.filter(s => s.uniqueId !== id);
+      if (newSessions.length === 0) {
+        setPage('connections');
+        setActiveSessionId(null);
+      } else if (activeSessionId === id) {
+        // Switch to last session
+        setActiveSessionId(newSessions[newSessions.length - 1].uniqueId);
+      }
+      return newSessions;
+    });
   };
+
+  const activeSession = sessions.find(s => s.uniqueId === activeSessionId);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden border border-border">
       <TitleBar />
-      
-      <div className="flex-1 overflow-hidden relative">
+
+      <div className="flex-1 overflow-hidden relative flex flex-col">
         {page === 'connections' && (
-          <ConnectionManager 
-            onConnect={handleConnect} 
-            onNavigate={setPage} 
+          <ConnectionManager
+            onConnect={handleConnect}
+            onNavigate={setPage}
           />
         )}
 
         {page === 'settings' && (
-          <Settings onBack={() => setPage(activeConnection ? 'workspace' : 'connections')} />
+          <Settings onBack={() => setPage(sessions.length > 0 ? 'workspace' : 'connections')} />
         )}
 
-        {page === 'workspace' && activeConnection && (
-          <div className="flex h-full w-full">
-            {/* Sidebar / FileBrowser */}
-            <div className="w-64 border-r border-border bg-card flex flex-col">
-               <div className="p-2 border-b border-border flex items-center justify-between">
-                  <span className="text-xs font-bold px-2 truncate">{activeConnection.name}</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleDisconnect} title="Disconnect">
-                    <Home className="w-3 h-3" />
-                  </Button>
-               </div>
-               <div className="flex-1 min-h-0">
-                  <ErrorBoundary name="FileBrowser">
-                    <FileBrowser connectionId={activeConnection.id} />
-                  </ErrorBoundary>
-               </div>
-            </div>
+        {page === 'workspace' && (
+          <>
+            <SessionTabs
+              sessions={sessions}
+              activeId={activeSessionId}
+              onSwitch={setActiveSessionId}
+              onClose={handleCloseSession}
+              onNew={() => setPage('connections')}
+            />
 
-            {/* Main Terminal */}
-            <div className="flex-1 min-w-0 bg-black">
-              <ErrorBoundary name="Terminal">
-                <TerminalView connectionId={activeConnection.id} />
-              </ErrorBoundary>
+            <div className="flex-1 relative overflow-hidden">
+              {/* Render ALL sessions to preserve state, but hide inactive ones */}
+              {sessions.map(session => (
+                <div
+                  key={session.uniqueId}
+                  className="absolute inset-0 z-0 bg-background"
+                  style={{
+                    visibility: session.uniqueId === activeSessionId ? 'visible' : 'hidden',
+                    zIndex: session.uniqueId === activeSessionId ? 10 : 0
+                  }}
+                >
+                  <ResizableLayout
+                    leftContent={
+                      <div className="h-full flex flex-col bg-card border-r border-border">
+                        <ErrorBoundary name="FileBrowser">
+                          <FileBrowser connectionId={session.uniqueId} />
+                        </ErrorBoundary>
+                      </div>
+                    }
+                    middleContent={
+                      <div className="h-full bg-black">
+                        <ErrorBoundary name="Terminal">
+                          <TerminalView connectionId={session.uniqueId} />
+                        </ErrorBoundary>
+                      </div>
+                    }
+                    rightContent={
+                      <div className="h-full bg-card border-l border-border">
+                        <ErrorBoundary name="SystemMonitor">
+                          <SystemMonitor connectionId={session.uniqueId} />
+                        </ErrorBoundary>
+                      </div>
+                    }
+                  />
+                </div>
+              ))}
             </div>
-
-            {/* Right Monitor */}
-            <div className="w-80 border-l border-border bg-card">
-              <ErrorBoundary name="SystemMonitor">
-                <SystemMonitor connectionId={activeConnection.id} />
-              </ErrorBoundary>
-            </div>
-          </div>
+          </>
         )}
       </div>
     </div>

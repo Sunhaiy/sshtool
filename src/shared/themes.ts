@@ -1,4 +1,4 @@
-export type ThemeId = 'light' | 'dark' | 'cyberpunk' | 'taxuexunmei' | 'pixel';
+export type ThemeId = 'light' | 'dark' | 'dracula' | 'githubLight' | 'solarizedDark' | 'monokaiPro' | 'bounds' | 'cyberpunk' | 'taxuexunmei' | 'pixel';
 
 export interface ThemeColors {
   background: string;
@@ -153,6 +153,252 @@ export const themes: Record<ThemeId, Theme> = {
       brightWhite: '#ffffff',
     }
   },
+
+  dracula: {
+    id: 'dracula',
+    name: 'Dracula',
+    type: 'dark',
+    fontFamily: "'Fira Code', monospace",
+    colors: {
+      background: "231 15% 18%",     // #282a36
+      foreground: "60 30% 96%",      // #f8f8f2
+      card: "231 15% 18%",
+      cardForeground: "60 30% 96%",
+      popover: "231 15% 18%",
+      popoverForeground: "60 30% 96%",
+      primary: "326 100% 74%",       // #ff79c6 (Pink)
+      primaryForeground: "231 15% 18%",
+      secondary: "231 15% 26%",      // #44475a
+      secondaryForeground: "60 30% 96%",
+      muted: "231 15% 26%",
+      mutedForeground: "225 27% 51%", // #6272a4
+      accent: "231 15% 26%",
+      accentForeground: "60 30% 96%",
+      destructive: "0 100% 67%",     // #ff5555
+      destructiveForeground: "60 30% 96%",
+      border: "231 15% 26%",
+      input: "231 15% 26%",
+      ring: "326 100% 74%",
+    },
+    terminal: {
+      background: '#282a36',
+      foreground: '#f8f8f2',
+      cursor: '#f8f8f0',
+      selectionBackground: '#44475a',
+      black: '#21222c',
+      red: '#ff5555',
+      green: '#50fa7b',
+      yellow: '#f1fa8c',
+      blue: '#bd93f9',
+      magenta: '#ff79c6',
+      cyan: '#8be9fd',
+      white: '#f8f8f2',
+      brightBlack: '#6272a4',
+      brightRed: '#ff6e6e',
+      brightGreen: '#69ff94',
+      brightYellow: '#ffffa5',
+      brightBlue: '#d6acff',
+      brightMagenta: '#ff92df',
+      brightCyan: '#a4ffff',
+      brightWhite: '#ffffff',
+    }
+  },
+  githubLight: {
+    id: 'githubLight',
+    name: 'GitHub Light',
+    type: 'light',
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+    colors: {
+      background: "0 0% 100%",
+      foreground: "0 0% 15%",
+      card: "0 0% 100%",
+      cardForeground: "0 0% 15%",
+      popover: "0 0% 100%",
+      popoverForeground: "0 0% 15%",
+      primary: "212 92% 43%", // #0969da
+      primaryForeground: "0 0% 100%",
+      secondary: "210 20% 96%",
+      secondaryForeground: "0 0% 15%",
+      muted: "210 20% 96%",
+      mutedForeground: "210 10% 40%",
+      accent: "212 92% 95%",
+      accentForeground: "212 92% 43%",
+      destructive: "350 90% 40%",
+      destructiveForeground: "0 0% 100%",
+      border: "210 18% 87%", // #d0d7de
+      input: "210 18% 87%",
+      ring: "212 92% 43%",
+    },
+    terminal: {
+      background: '#ffffff',
+      foreground: '#24292f',
+      cursor: '#044289',
+      selectionBackground: '#cee9f9',
+      black: '#24292f',
+      red: '#cf222e',
+      green: '#116329',
+      yellow: '#4d2d00',
+      blue: '#0969da',
+      magenta: '#8250df',
+      cyan: '#1b7c83',
+      white: '#6e7781',
+      brightBlack: '#6e7781',
+      brightRed: '#a40e26',
+      brightGreen: '#1a7f37',
+      brightYellow: '#9a6700',
+      brightBlue: '#218bff',
+      brightMagenta: '#a475f9',
+      brightCyan: '#3192aa',
+      brightWhite: '#8c959f',
+    }
+  },
+  solarizedDark: {
+    id: 'solarizedDark',
+    name: 'Solarized Dark',
+    type: 'dark',
+    fontFamily: "'Fira Code', monospace",
+    colors: {
+      background: "192 81% 14%",     // #002b36
+      foreground: "45 10% 55%",      // #839496
+      card: "192 81% 14%",
+      cardForeground: "45 10% 55%",
+      popover: "192 81% 14%",
+      popoverForeground: "45 10% 55%",
+      primary: "168 55% 45%",        // #2aa198 (Cyan)
+      primaryForeground: "0 0% 100%", // Light
+      secondary: "192 65% 18%",      // #073642
+      secondaryForeground: "45 10% 55%",
+      muted: "192 65% 18%",
+      mutedForeground: "193 15% 40%",
+      accent: "192 65% 18%",
+      accentForeground: "45 10% 55%",
+      destructive: "353 79% 52%",    // #dc322f
+      destructiveForeground: "0 0% 100%",
+      border: "192 65% 18%",
+      input: "192 65% 18%",
+      ring: "168 55% 45%",
+    },
+    terminal: {
+      background: '#002b36',
+      foreground: '#839496',
+      cursor: '#93a1a1',
+      selectionBackground: '#073642',
+      black: '#073642',
+      red: '#dc322f',
+      green: '#859900',
+      yellow: '#b58900',
+      blue: '#268bd2',
+      magenta: '#d33682',
+      cyan: '#2aa198',
+      white: '#eee8d5',
+      brightBlack: '#002b36',
+      brightRed: '#cb4b16',
+      brightGreen: '#586e75',
+      brightYellow: '#657b83',
+      brightBlue: '#839496',
+      brightMagenta: '#6c71c4',
+      brightCyan: '#93a1a1',
+      brightWhite: '#fdf6e3',
+    }
+  },
+  monokaiPro: {
+    id: 'monokaiPro',
+    name: 'Monokai Pro',
+    type: 'dark',
+    fontFamily: "'Courier New', monospace",
+    colors: {
+      background: "0 0% 17%",        // #2D2A2E
+      foreground: "0 0% 95%",        // #FCFCFA
+      card: "0 0% 17%",
+      cardForeground: "0 0% 95%",
+      popover: "0 0% 17%",
+      popoverForeground: "0 0% 95%",
+      primary: "33 100% 50%",        // #FFD866 (Yellow)
+      primaryForeground: "0 0% 17%",
+      secondary: "0 0% 25%",         // #403E41
+      secondaryForeground: "0 0% 95%",
+      muted: "0 0% 25%",
+      mutedForeground: "0 0% 60%",
+      accent: "0 0% 25%",
+      accentForeground: "0 0% 95%",
+      destructive: "350 85% 60%",    // #FF6188
+      destructiveForeground: "0 0% 100%",
+      border: "0 0% 25%",
+      input: "0 0% 25%",
+      ring: "33 100% 50%",
+    },
+    terminal: {
+      background: '#2D2A2E',
+      foreground: '#FCFCFA',
+      cursor: '#FFD866',
+      selectionBackground: '#403E41',
+      black: '#2D2A2E',
+      red: '#FF6188',
+      green: '#A9DC76',
+      yellow: '#FFD866',
+      blue: '#FC9867',
+      magenta: '#AB9DF2',
+      cyan: '#78DCE8',
+      white: '#FCFCFA',
+      brightBlack: '#727072',
+      brightRed: '#FF6188',
+      brightGreen: '#A9DC76',
+      brightYellow: '#FFD866',
+      brightBlue: '#FC9867',
+      brightMagenta: '#AB9DF2',
+      brightCyan: '#78DCE8',
+      brightWhite: '#FCFCFA',
+    }
+  },
+  bounds: {
+    id: 'bounds',
+    name: 'Bounds',
+    type: 'dark',
+    fontFamily: "'Inter', sans-serif",
+    colors: {
+      background: "215 28% 13%", // Deep Blue Grey
+      foreground: "0 0% 95%",
+      card: "215 28% 17%",
+      cardForeground: "0 0% 95%",
+      popover: "215 28% 17%",
+      popoverForeground: "0 0% 95%",
+      primary: "200 90% 60%",    // Light Blue
+      primaryForeground: "0 0% 10%",
+      secondary: "215 28% 22%",
+      secondaryForeground: "0 0% 95%",
+      muted: "215 28% 22%",
+      mutedForeground: "215 15% 60%",
+      accent: "215 28% 22%",
+      accentForeground: "0 0% 95%",
+      destructive: "350 80% 60%",
+      destructiveForeground: "0 0% 100%",
+      border: "215 28% 25%",
+      input: "215 28% 22%",
+      ring: "200 90% 60%",
+    },
+    terminal: {
+      background: '#171c23',
+      foreground: '#d7dae0',
+      cursor: '#4db2ea',
+      selectionBackground: '#2d3b4f',
+      black: '#171c23',
+      red: '#e06c75',
+      green: '#98c379',
+      yellow: '#e5c07b',
+      blue: '#61afef',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      white: '#abb2bf',
+      brightBlack: '#5c6370',
+      brightRed: '#e06c75',
+      brightGreen: '#98c379',
+      brightYellow: '#e5c07b',
+      brightBlue: '#61afef',
+      brightMagenta: '#c678dd',
+      brightCyan: '#56b6c2',
+      brightWhite: '#ffffff',
+    }
+  },
   cyberpunk: {
     id: 'cyberpunk',
     name: 'Cyberpunk 2077',
@@ -301,3 +547,4 @@ export const themes: Record<ThemeId, Theme> = {
     }
   }
 };
+

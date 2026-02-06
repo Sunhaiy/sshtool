@@ -11,14 +11,14 @@ interface ThemeState {
 export const useThemeStore = create<ThemeState>((set, get) => ({
   currentThemeId: 'dark',
   theme: themes['dark'],
-  
+
   setTheme: (id: ThemeId) => {
     const theme = themes[id];
     set({ currentThemeId: id, theme });
-    
+
     // Apply CSS variables
     const root = document.documentElement;
-    
+
     // Set class for dark/light mode for Tailwind
     if (theme.type === 'dark') {
       root.classList.add('dark');
@@ -26,8 +26,8 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       root.classList.remove('dark');
     }
 
-    // Set custom font
-    document.body.style.fontFamily = theme.fontFamily;
+    // Set custom font (Managed by settingsStore now)
+    // document.body.style.fontFamily = theme.fontFamily;
 
     // Set CSS variables
     Object.entries(theme.colors).forEach(([key, value]) => {

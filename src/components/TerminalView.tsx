@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useThemeStore } from '../store/themeStore';
+import { useSettingsStore } from '../store/settingsStore';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -12,17 +13,22 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const { theme } = useThemeStore();
+  const { fontFamily } = useSettingsStore();
 
   useEffect(() => {
     if (!termRef.current) return;
-    
+
     // Update terminal theme when app theme changes
     termRef.current.options.theme = {
       ...theme.terminal,
       selection: theme.terminal.selectionBackground
     };
-    termRef.current.options.fontFamily = theme.fontFamily;
   }, [theme]);
+
+  useEffect(() => {
+    if (!termRef.current) return;
+    termRef.current.options.fontFamily = fontFamily;
+  }, [fontFamily]);
 
   useEffect(() => {
     if (!containerRef.current || !connectionId) return;
@@ -30,16 +36,16 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: theme.fontFamily,
+      fontFamily: fontFamily,
       theme: {
         ...theme.terminal,
         selection: theme.terminal.selectionBackground
       }
     });
-    
+
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    
+
     term.open(containerRef.current);
     try {
       fitAddon.fit();
@@ -62,7 +68,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       try {
         fitAddon.fit();
         if (term.cols > 0 && term.rows > 0) {
-           window.electron.resizeTerminal(connectionId, term.cols, term.rows);
+          window.electron.resizeTerminal(connectionId, term.cols, term.rows);
         }
       } catch (e) {
         console.warn('Resize fit failed:', e);
