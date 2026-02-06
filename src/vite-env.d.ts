@@ -34,6 +34,10 @@ declare global {
       getDockerContainers: (id: string) => Promise<any[]>;
       dockerAction: (id: string, containerId: string, action: 'start' | 'stop' | 'restart') => Promise<void>;
 
+      addTunnel: (id: string, type: 'L' | 'R', config: any) => Promise<string>;
+      removeTunnel: (id: string, tunnelId: string) => Promise<void>;
+      getTunnels: (id: string) => Promise<any[]>;
+
       onSSHStatus: (callback: (event: any, payload: { id: string, status: string }) => void) => () => void;
 
       minimize: () => void;
