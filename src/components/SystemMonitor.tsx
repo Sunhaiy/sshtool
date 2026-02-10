@@ -51,7 +51,7 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
     }
 
     return (
-        <div className="h-full bg-background/95 backdrop-blur-sm text-foreground p-4 overflow-y-auto space-y-4 font-sans border-l border-border/50 scrollbar-hide">
+        <div className="h-full bg-transparent text-foreground p-4 overflow-y-auto space-y-4 font-sans border-l border-border/50 scrollbar-hide">
 
             {/* Header / OS Info - Card Style */}
             <div className="bg-card/40 border border-border/50 rounded-lg p-3 flex items-center justify-between shadow-sm backdrop-blur-md">

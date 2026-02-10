@@ -105,8 +105,8 @@ function App() {
   console.log('App rendering, page:', page, 'sessions:', sessions.length);
 
   return (
-    <div className="h-screen w-screen flex flex-col text-foreground overflow-hidden border border-border bg-background">
-      <TitleBar />
+    <div className="h-screen w-screen flex flex-col text-foreground overflow-hidden border border-border bg-transparent">
+      <TitleBar onSettings={() => setPage('settings')} />
 
       <div className="flex-1 overflow-hidden relative flex flex-col">
         {page === 'connections' && (
@@ -150,21 +150,21 @@ function App() {
                 >
                   <ResizableLayout
                     leftContent={
-                      <div className="h-full flex flex-col bg-card/40 border-r border-border backdrop-blur-sm">
+                      <div className="h-full flex flex-col bg-transparent border-r border-border">
                         <ErrorBoundary name="FileBrowser">
                           <FileBrowser connectionId={session.uniqueId} />
                         </ErrorBoundary>
                       </div>
                     }
                     middleContent={
-                      <div className="h-full bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden">
+                      <div className="h-full bg-transparent flex flex-col overflow-hidden">
                         <div className="flex-1 min-h-0 relative overflow-hidden">
                           <ErrorBoundary name="Terminal">
                             <TerminalView connectionId={session.uniqueId} />
                           </ErrorBoundary>
                         </div>
                         {aiEnabled && (
-                          <div className="flex-shrink-0 border-t border-border p-1.5 bg-background/40 backdrop-blur-sm">
+                          <div className="flex-shrink-0 border-t border-border p-1.5 bg-transparent">
                             <AICommandInput
                               onCommandGenerated={(cmd) => {
                                 const eWindow = window as any;
@@ -176,7 +176,7 @@ function App() {
                       </div>
                     }
                     rightContent={
-                      <div className="h-full bg-card/40 border-l border-border backdrop-blur-sm">
+                      <div className="h-full bg-transparent border-l border-border">
                         <ErrorBoundary name="RightPanel">
                           <RightPanel connectionId={session.uniqueId} />
                         </ErrorBoundary>

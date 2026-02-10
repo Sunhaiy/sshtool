@@ -1,6 +1,10 @@
-import { Minus, Square, X } from "lucide-react";
+import { Minus, Square, X, Settings } from "lucide-react";
 
-export function TitleBar() {
+interface TitleBarProps {
+  onSettings?: () => void;
+}
+
+export function TitleBar({ onSettings }: TitleBarProps) {
   return (
     <div className="h-8 bg-background border-b flex items-center justify-between select-none" style={{ WebkitAppRegion: "drag" } as any}>
       <div className="px-4 text-xs font-medium text-muted-foreground flex items-center gap-2">
@@ -8,6 +12,14 @@ export function TitleBar() {
         藏青
       </div>
       <div className="flex h-full" style={{ WebkitAppRegion: "no-drag" } as any}>
+        <button
+          onClick={onSettings}
+          className="h-full w-10 flex items-center justify-center hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+          title="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+        <div className="w-px h-4 my-auto bg-border mx-1"></div>
         <button
           onClick={() => window.electron.minimize()}
           className="h-full w-10 flex items-center justify-center hover:bg-secondary text-muted-foreground transition-colors"

@@ -64,8 +64,8 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         allowProposedApi: true,
         allowTransparency: true,
         theme: {
-          background: 'transparent',
           ...(currentTerminalTheme || {}),
+          background: 'transparent',
         }
       });
 
@@ -180,7 +180,10 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
 
     // Theme
     if (terminalTheme) {
-      termRef.current.options.theme = terminalTheme;
+      termRef.current.options.theme = {
+        ...terminalTheme,
+        background: 'transparent'
+      };
     }
 
     // Settings

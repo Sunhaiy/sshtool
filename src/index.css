@@ -125,3 +125,9 @@
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Force xterm transparency */
+.xterm-viewport,
+.xterm-screen {
+  background-color: transparent !important;
+}

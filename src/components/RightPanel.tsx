@@ -12,7 +12,7 @@ export function RightPanel({ connectionId }: RightPanelProps) {
     const [activeTab, setActiveTab] = useState<'monitor' | 'docker'>('monitor');
 
     return (
-        <div className="h-full flex flex-col bg-background">
+        <div className="h-full flex flex-col bg-transparent">
             {/* Tabs */}
             <div className="flex items-center border-b border-border bg-muted/40 text-xs overflow-x-auto no-scrollbar">
                 <button

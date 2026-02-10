@@ -31,7 +31,6 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
   const [editingFile, setEditingFile] = useState<{ name: string, path: string, content: string } | null>(null);
   const [pathCache, setPathCache] = useState<Record<string, FileEntry[]>>({});
   const [inputPath, setInputPath] = useState('/');
-  // const [bookmarks, setBookmarks] = useState<string[]>([]); // Removed: Using global store
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ file: string, percent: number } | null>(null);
   const [inputDialog, setInputDialog] = useState<{
@@ -47,6 +46,9 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
 
   // Filter State
   const [filterQuery, setFilterQuery] = useState('');
+
+  // Bookmarks State
+  const [showBookmarks, setShowBookmarks] = useState(false);
 
   // Use Settings Store for bookmarks
   const { bookmarks, toggleBookmark } = useSettingsStore();
@@ -327,7 +329,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
 
   return (
     <div
-      className="flex flex-col h-full bg-background/50 backdrop-blur-sm border-r border-border text-foreground relative"
+      className="flex flex-col h-full bg-transparent border-r border-border text-foreground relative"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -352,85 +354,97 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
       )}
 
       {/* Toolbar */}
-      <div className="p-2 border-b border-border flex flex-col gap-2 bg-card/60 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <button onClick={handleUp} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Up">
-            <ArrowUp className="w-4 h-4" />
+      <div className="p-2 border-b border-border flex items-center gap-2 bg-card/60 backdrop-blur-md">
+        <button onClick={handleUp} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Up">
+          <ArrowUp className="w-4 h-4" />
+        </button>
+
+        <button onClick={() => loadFiles(currentPath, true)} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+
+        <div className="flex-1 flex items-center gap-1 bg-background/50 border border-border rounded px-2 h-8">
+          <input
+            className="flex-1 bg-transparent border-none outline-none text-xs font-mono h-full"
+            value={inputPath}
+            onChange={(e) => setInputPath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                loadFiles(inputPath);
+              }
+            }}
+          />
+          <button
+            onClick={() => toggleBookmark(currentPath)}
+            className={`p-1.5 rounded transition-colors ${bookmarks.includes(currentPath) ? 'text-yellow-500' : 'text-muted-foreground hover:text-foreground'}`}
+            title="Add to Bookmarks"
+          >
+            <Star className={`w-3.5 h-3.5 ${bookmarks.includes(currentPath) ? 'fill-current' : ''}`} />
           </button>
-
-          <div className="flex-1 flex items-center gap-1 bg-background/50 border border-border rounded px-2 h-8">
-            <input
-              className="flex-1 bg-transparent border-none outline-none text-xs font-mono h-full"
-              value={inputPath}
-              onChange={(e) => setInputPath(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  loadFiles(inputPath);
-                }
-              }}
-            />
-            <button
-              onClick={() => toggleBookmark(currentPath)}
-              className={`p-1 rounded transition-colors ${bookmarks.includes(currentPath) ? 'text-yellow-500' : 'text-muted-foreground hover:text-foreground'}`}
-              title="Bookmark"
-            >
-              <Star className={`w-3.5 h-3.5 ${bookmarks.includes(currentPath) ? 'fill-current' : ''}`} />
-            </button>
-          </div>
-
-          <button onClick={() => loadFiles(currentPath, true)} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-
-          {/* Bookmarks */}
-          <div className="relative group">
-            <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors">
-              <Bookmark className="w-4 h-4" />
-            </button>
-            <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded shadow-xl hidden group-hover:block z-50">
-              <div className="p-2 text-xs font-medium text-muted-foreground border-b border-border">Favorites</div>
-              {bookmarks.length === 0 ? (
-                <div className="p-2 text-xs text-muted-foreground italic">No bookmarks</div>
-              ) : (
-                bookmarks.map(path => (
-                  <div
-                    key={path}
-                    className="px-3 py-2 hover:bg-secondary cursor-pointer text-xs truncate flex justify-between items-center"
-                    onClick={() => loadFiles(path)}
-                  >
-                    <span className="truncate flex-1" title={path}>{path}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleBookmark(path); }}
-                      className="text-muted-foreground hover:text-destructive ml-2"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
         </div>
 
-        {/* Filter Input */}
+        {/* Bookmarks */}
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2 top-2 text-muted-foreground pointer-events-none" />
-          <input
-            className="w-full h-7 pl-7 pr-2 text-xs bg-muted/40 border-none rounded focus:ring-1 focus:ring-primary outline-none placeholder:text-muted-foreground/50"
-            placeholder="Filter files..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-          />
+          <button
+            className={`p-1.5 hover:bg-secondary rounded transition-colors ${showBookmarks ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            title="Bookmarks"
+            onClick={() => setShowBookmarks(!showBookmarks)}
+          >
+            <Bookmark className="w-4 h-4" />
+          </button>
+
+          {showBookmarks && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowBookmarks(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="p-2 text-xs font-medium text-muted-foreground border-b border-border">Favorites</div>
+                {bookmarks.length === 0 ? (
+                  <div className="p-2 text-xs text-muted-foreground italic">No bookmarks</div>
+                ) : (
+                  bookmarks.map(path => (
+                    <div
+                      key={path}
+                      className="px-3 py-2 hover:bg-secondary cursor-pointer text-xs truncate flex justify-between items-center"
+                      onClick={() => {
+                        loadFiles(path);
+                        setShowBookmarks(false);
+                      }}
+                    >
+                      <span className="truncate flex-1" title={path}>{path}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleBookmark(path); }}
+                        className="text-muted-foreground hover:text-destructive ml-2"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Filter Input */}
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 absolute left-2 top-2 text-muted-foreground pointer-events-none" />
+        <input
+          className="w-full h-7 pl-7 pr-2 text-xs bg-muted/40 border-none rounded focus:ring-1 focus:ring-primary outline-none placeholder:text-muted-foreground/50"
+          placeholder="Filter files..."
+          value={filterQuery}
+          onChange={(e) => setFilterQuery(e.target.value)}
+        />
+      </div>
+
+
       {/* File Table Header */}
-      <div className="grid grid-cols-[1fr_80px_120px] gap-2 px-3 py-1.5 border-b border-border text-[10px] uppercase font-bold text-muted-foreground/70 bg-muted/20 select-none">
+      <div className="grid grid-cols-[1fr_120px] gap-2 px-3 py-1.5 border-b border-border text-[10px] uppercase font-bold text-muted-foreground/70 bg-muted/20 select-none">
         <div className="flex items-center gap-1 cursor-pointer hover:text-foreground" onClick={() => toggleSort('name')}>
           Name <SortIcon field="name" />
-        </div>
-        <div className="flex items-center gap-1 cursor-pointer hover:text-foreground justify-end" onClick={() => toggleSort('size')}>
-          Size <SortIcon field="size" />
         </div>
         <div className="flex items-center gap-1 cursor-pointer hover:text-foreground justify-end" onClick={() => toggleSort('date')}>
           Date <SortIcon field="date" />
@@ -447,7 +461,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
             <div
               key={i}
               className={cn(
-                "grid grid-cols-[1fr_80px_120px] gap-2 px-3 py-1.5 cursor-pointer text-xs group transition-colors select-none items-center border-b border-transparent hover:border-border/30",
+                "grid grid-cols-[1fr_120px] gap-2 px-3 py-1.5 cursor-pointer text-xs group transition-colors select-none items-center border-b border-transparent hover:border-border/30",
                 "hover:bg-primary/5 active:bg-primary/10"
               )}
               onClick={() => file.type === 'd' && handleNavigate(file)}
@@ -467,10 +481,6 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
                 <span className="truncate text-foreground/90 font-medium">{file.name}</span>
               </div>
 
-              <div className="text-right text-muted-foreground/70 font-mono tabular-nums">
-                {file.type === '-' ? (file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`) : '-'}
-              </div>
-
               <div className="text-right text-muted-foreground/60 font-mono text-[10px]">
                 {file.date ? (new Date(file.date).toLocaleDateString()) : '-'}
               </div>
@@ -482,141 +492,148 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
       </div>
 
       {/* Context Menu */}
-      {contextMenu && createPortal(
-        <>
-          <div
-            className="fixed inset-0 z-[10002]"
-            onClick={() => setContextMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setContextMenu(null);
-            }}
-          />
-          <div
-            className="fixed bg-popover/90 backdrop-blur-md border border-border shadow-xl rounded py-1 z-[10003] w-48 text-popover-foreground animate-in fade-in zoom-in-95 duration-100"
-            style={{
-              top: Math.min(contextMenu.y, window.innerHeight - 200),
-              left: Math.min(contextMenu.x, window.innerWidth - 180)
-            }}
-          >
-            {contextMenu.file ? (
-              <>
-                <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 mb-1 truncate font-semibold bg-muted/20">
-                  {contextMenu.file.name}
-                </div>
-                <button onClick={() => {
-                  if (contextMenu.file?.type === '-') {
-                    const path = currentPath === '/' ? `/${contextMenu.file.name}` : `${currentPath}/${contextMenu.file.name}`;
-                    handleFileOpen(contextMenu.file, path);
+      {
+        contextMenu && createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[10002]"
+              onClick={() => setContextMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setContextMenu(null);
+              }}
+            />
+            <div
+              className="fixed bg-popover/90 backdrop-blur-md border border-border shadow-xl rounded py-1 z-[10003] w-48 text-popover-foreground animate-in fade-in zoom-in-95 duration-100"
+              style={{
+                top: Math.min(contextMenu.y, window.innerHeight - 200),
+                left: Math.min(contextMenu.x, window.innerWidth - 180)
+              }}
+            >
+              {contextMenu.file ? (
+                <>
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 mb-1 truncate font-semibold bg-muted/20">
+                    {contextMenu.file.name}
+                  </div>
+                  <button onClick={() => {
+                    if (contextMenu.file?.type === '-') {
+                      const path = currentPath === '/' ? `/${contextMenu.file.name}` : `${currentPath}/${contextMenu.file.name}`;
+                      handleFileOpen(contextMenu.file, path);
+                      setContextMenu(null);
+                    }
+                  }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm disabled:opacity-50 transition-colors" disabled={contextMenu.file.type !== '-'}>
+                    <Edit2 className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button onClick={() => {
+                    if (contextMenu.file) handleDownload(contextMenu.file);
                     setContextMenu(null);
-                  }
-                }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm disabled:opacity-50 transition-colors" disabled={contextMenu.file.type !== '-'}>
-                  <Edit2 className="w-3.5 h-3.5" /> Edit
-                </button>
-                <button onClick={() => {
-                  if (contextMenu.file) handleDownload(contextMenu.file);
-                  setContextMenu(null);
-                }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
-                  <Download className="w-3.5 h-3.5" /> Download
-                </button>
-                <button onClick={() => {
-                  if (contextMenu.file) handleRename(contextMenu.file);
-                  setContextMenu(null);
-                }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
-                  <Edit2 className="w-3.5 h-3.5" /> Rename
-                </button>
-                <button onClick={() => {
-                  if (contextMenu.file) handleDelete(contextMenu.file);
-                  setContextMenu(null);
-                }} className="w-full text-left px-3 py-1.5 hover:bg-destructive/10 text-destructive flex items-center gap-2 text-sm transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </button>
-                <div className="h-px bg-border/50 my-1" />
-              </>
-            ) : (
-              <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 mb-1 font-semibold bg-muted/20">
-                Current Folder
-              </div>
-            )}
+                  }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
+                    <Download className="w-3.5 h-3.5" /> Download
+                  </button>
+                  <button onClick={() => {
+                    if (contextMenu.file) handleRename(contextMenu.file);
+                    setContextMenu(null);
+                  }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
+                    <Edit2 className="w-3.5 h-3.5" /> Rename
+                  </button>
+                  <button onClick={() => {
+                    if (contextMenu.file) handleDelete(contextMenu.file);
+                    setContextMenu(null);
+                  }} className="w-full text-left px-3 py-1.5 hover:bg-destructive/10 text-destructive flex items-center gap-2 text-sm transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                  <div className="h-px bg-border/50 my-1" />
+                </>
+              ) : (
+                <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 mb-1 font-semibold bg-muted/20">
+                  Current Folder
+                </div>
+              )}
 
-            <button onClick={handleCreateFile} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
-              <Plus className="w-3.5 h-3.5" /> New File
-            </button>
-            <button onClick={handleCreateFolder} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
-              <FolderPlus className="w-3.5 h-3.5" /> New Folder
-            </button>
-            <button onClick={() => { handleUpload(); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
-              <Upload className="w-3.5 h-3.5" /> Upload File
-            </button>
-            <button onClick={() => { loadFiles(currentPath, true); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm border-t border-border/50 mt-1 pt-2 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
-            </button>
-          </div>
-        </>,
-        document.body
-      )}
-
-      {/* File Editor Modal */}
-      {editingFile && (
-        <FileEditor
-          fileName={editingFile.name}
-          filePath={editingFile.path}
-          initialContent={editingFile.content}
-          onSave={async (newContent) => {
-            await window.electron.sftpWriteFile(connectionId, editingFile.path, newContent);
-          }}
-          onClose={() => setEditingFile(null)}
-        />
-      )}
-      {/* Custom Input Dialog */}
-      {inputDialog && createPortal(
-        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-background/60 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-card border border-border shadow-2xl rounded-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-4 py-3 border-b border-border bg-muted/30 font-medium text-sm flex justify-between items-center">
-              {inputDialog.title}
-              <button onClick={() => setInputDialog(null)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
+              <button onClick={handleCreateFile} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
+                <Plus className="w-3.5 h-3.5" /> New File
+              </button>
+              <button onClick={handleCreateFolder} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
+                <FolderPlus className="w-3.5 h-3.5" /> New Folder
+              </button>
+              <button onClick={() => { handleUpload(); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
+                <Upload className="w-3.5 h-3.5" /> Upload File
+              </button>
+              <button onClick={() => { loadFiles(currentPath, true); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm border-t border-border/50 mt-1 pt-2 transition-colors">
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
               </button>
             </div>
-            <div className="p-4 flex flex-col gap-3">
-              <label className="text-sm text-muted-foreground">{inputDialog.message}</label>
-              <input
-                autoFocus
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                defaultValue={inputDialog.defaultValue}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    inputDialog.onConfirm(e.currentTarget.value);
-                    setInputDialog(null);
-                  } else if (e.key === 'Escape') {
-                    setInputDialog(null);
-                  }
-                }}
-                id="dialog-input"
-              />
-              <div className="flex justify-end gap-2 mt-2">
-                <button
-                  onClick={() => setInputDialog(null)}
-                  className="px-4 py-2 text-sm hover:bg-secondary rounded transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    const val = (document.getElementById('dialog-input') as HTMLInputElement).value;
-                    inputDialog.onConfirm(val);
-                    setInputDialog(null);
-                  }}
-                  className="px-4 py-2 text-sm bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors"
-                >
-                  Confirm
+          </>,
+          document.body
+        )
+      }
+
+      {/* File Editor Modal */}
+      {
+        editingFile && (
+          <FileEditor
+            fileName={editingFile.name}
+            filePath={editingFile.path}
+            initialContent={editingFile.content}
+            onSave={async (newContent) => {
+              await window.electron.sftpWriteFile(connectionId, editingFile.path, newContent);
+            }}
+            onClose={() => setEditingFile(null)}
+          />
+        )
+      }
+
+      {/* Custom Input Dialog */}
+      {
+        inputDialog && createPortal(
+          <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-background/60 backdrop-blur-sm">
+            <div className="w-full max-w-sm bg-card border border-border shadow-2xl rounded-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-4 py-3 border-b border-border bg-muted/30 font-medium text-sm flex justify-between items-center">
+                {inputDialog.title}
+                <button onClick={() => setInputDialog(null)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-4 h-4" />
                 </button>
               </div>
+              <div className="p-4 flex flex-col gap-3">
+                <label className="text-sm text-muted-foreground">{inputDialog.message}</label>
+                <input
+                  autoFocus
+                  className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  defaultValue={inputDialog.defaultValue}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      inputDialog.onConfirm(e.currentTarget.value);
+                      setInputDialog(null);
+                    } else if (e.key === 'Escape') {
+                      setInputDialog(null);
+                    }
+                  }}
+                  id="dialog-input"
+                />
+                <div className="flex justify-end gap-2 mt-2">
+                  <button
+                    onClick={() => setInputDialog(null)}
+                    className="px-4 py-2 text-sm hover:bg-secondary rounded transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const val = (document.getElementById('dialog-input') as HTMLInputElement).value;
+                      inputDialog.onConfirm(val);
+                      setInputDialog(null);
+                    }}
+                    className="px-4 py-2 text-sm bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </div>
+          </div>,
+          document.body
+        )
+      }
+    </div >
   );
 }
