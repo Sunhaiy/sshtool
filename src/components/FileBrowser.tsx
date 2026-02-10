@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { FileEntry } from '../shared/types';
-import { Folder, File, ArrowLeft, RefreshCw, Upload, Download, Trash2, MoreVertical, Edit2, Plus, ArrowUp, FolderPlus, Star, Bookmark, X } from 'lucide-react';
+import {
+  Folder, File, ArrowLeft, RefreshCw, Upload, Download, Trash2, Edit2,
+  Plus, ArrowUp, FolderPlus, Star, Bookmark, X, Search, ChevronDown, ChevronUp
+} from 'lucide-react';
 import { FileEditor } from './FileEditor';
+import { cn } from '../lib/utils';
+import { format } from 'date-fns';
+import { useSettingsStore } from '../store/settingsStore';
 
 interface FileBrowserProps {
   connectionId: string;
@@ -14,6 +20,9 @@ interface ContextMenu {
   file: FileEntry | null;
 }
 
+type SortField = 'name' | 'size' | 'date';
+type SortOrder = 'asc' | 'desc';
+
 export function FileBrowser({ connectionId }: FileBrowserProps) {
   const [currentPath, setCurrentPath] = useState('/');
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -22,7 +31,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
   const [editingFile, setEditingFile] = useState<{ name: string, path: string, content: string } | null>(null);
   const [pathCache, setPathCache] = useState<Record<string, FileEntry[]>>({});
   const [inputPath, setInputPath] = useState('/');
-  const [bookmarks, setBookmarks] = useState<string[]>([]);
+  // const [bookmarks, setBookmarks] = useState<string[]>([]); // Removed: Using global store
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ file: string, percent: number } | null>(null);
   const [inputDialog, setInputDialog] = useState<{
@@ -32,23 +41,17 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
     onConfirm: (value: string) => void;
   } | null>(null);
 
-  useEffect(() => {
-    // Load bookmarks
-    window.electron.storeGet('bookmarks').then(stored => {
-      if (Array.isArray(stored)) setBookmarks(stored);
-    });
-  }, []);
+  // Sorting State
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
-  const toggleBookmark = (path: string) => {
-    const newBookmarks = bookmarks.includes(path)
-      ? bookmarks.filter(b => b !== path)
-      : [...bookmarks, path];
-    setBookmarks(newBookmarks);
-    window.electron.storeSet('bookmarks', newBookmarks);
-  };
+  // Filter State
+  const [filterQuery, setFilterQuery] = useState('');
+
+  // Use Settings Store for bookmarks
+  const { bookmarks, toggleBookmark } = useSettingsStore();
 
   const loadFiles = async (path: string, force = false) => {
-    // Optimistic cache hit
     if (!force && pathCache[path]) {
       setFiles(pathCache[path]);
       setCurrentPath(path);
@@ -58,7 +61,6 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
 
     setLoading(true);
     try {
-      // First get absolute path if we are at .
       if (path === '.') {
         const pwd = await window.electron.getPwd(connectionId);
         path = pwd;
@@ -277,9 +279,55 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
     setContextMenu({ x: e.clientX, y: e.clientY, file });
   };
 
+  // Sorting and Filtering Logic
+  const sortedAndFilteredFiles = useMemo(() => {
+    let result = files;
+
+    if (filterQuery) {
+      const q = filterQuery.toLowerCase();
+      result = result.filter(f => f.name.toLowerCase().includes(q));
+    }
+
+    return result.sort((a, b) => {
+      // Always put directories first
+      if (a.type !== b.type) {
+        return a.type === 'd' ? -1 : 1;
+      }
+
+      let comparison = 0;
+      switch (sortField) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'size':
+          comparison = a.size - b.size;
+          break;
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [files, sortField, sortOrder, filterQuery]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <div className="w-3 h-3 opacity-0" />;
+    return sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
+  };
+
   return (
     <div
-      className="flex flex-col h-full bg-background border-r border-border text-foreground relative"
+      className="flex flex-col h-full bg-background/50 backdrop-blur-sm border-r border-border text-foreground relative"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -304,79 +352,104 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
       )}
 
       {/* Toolbar */}
-      <div className="p-2 border-b border-border flex items-center gap-2 bg-card">
-        <button onClick={handleUp} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Up">
-          <ArrowUp className="w-4 h-4" />
-        </button>
-
-        <div className="flex-1 flex items-center gap-1 bg-background border border-border rounded px-2 h-8">
-          <input
-            className="flex-1 bg-transparent border-none outline-none text-sm font-mono h-full"
-            value={inputPath}
-            onChange={(e) => setInputPath(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                loadFiles(inputPath);
-              }
-            }}
-          />
-          {/* Bookmark Toggle */}
-          <button
-            onClick={() => toggleBookmark(currentPath)}
-            className={`p-1 rounded transition-colors ${bookmarks.includes(currentPath) ? 'text-yellow-500' : 'text-muted-foreground hover:text-foreground'}`}
-            title="Bookmark current path"
-          >
-            <Star className={`w-3.5 h-3.5 ${bookmarks.includes(currentPath) ? 'fill-current' : ''}`} />
+      <div className="p-2 border-b border-border flex flex-col gap-2 bg-card/60 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <button onClick={handleUp} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Up">
+            <ArrowUp className="w-4 h-4" />
           </button>
-        </div>
 
-        {/* Bookmarks Dropdown Trigger */}
-        <div className="relative group">
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Bookmarks">
-            <Bookmark className="w-4 h-4" />
+          <div className="flex-1 flex items-center gap-1 bg-background/50 border border-border rounded px-2 h-8">
+            <input
+              className="flex-1 bg-transparent border-none outline-none text-xs font-mono h-full"
+              value={inputPath}
+              onChange={(e) => setInputPath(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  loadFiles(inputPath);
+                }
+              }}
+            />
+            <button
+              onClick={() => toggleBookmark(currentPath)}
+              className={`p-1 rounded transition-colors ${bookmarks.includes(currentPath) ? 'text-yellow-500' : 'text-muted-foreground hover:text-foreground'}`}
+              title="Bookmark"
+            >
+              <Star className={`w-3.5 h-3.5 ${bookmarks.includes(currentPath) ? 'fill-current' : ''}`} />
+            </button>
+          </div>
+
+          <button onClick={() => loadFiles(currentPath, true)} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded shadow-xl hidden group-hover:block z-50">
-            <div className="p-2 text-xs font-medium text-muted-foreground border-b border-border">Favorites</div>
-            {bookmarks.length === 0 ? (
-              <div className="p-2 text-xs text-muted-foreground italic">No bookmarks</div>
-            ) : (
-              bookmarks.map(path => (
-                <div
-                  key={path}
-                  className="px-3 py-2 hover:bg-secondary cursor-pointer text-xs truncate flex justify-between items-center"
-                  onClick={() => loadFiles(path)}
-                >
-                  <span className="truncate flex-1" title={path}>{path}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleBookmark(path); }}
-                    className="text-muted-foreground hover:text-destructive ml-2"
+
+          {/* Bookmarks */}
+          <div className="relative group">
+            <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors">
+              <Bookmark className="w-4 h-4" />
+            </button>
+            <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded shadow-xl hidden group-hover:block z-50">
+              <div className="p-2 text-xs font-medium text-muted-foreground border-b border-border">Favorites</div>
+              {bookmarks.length === 0 ? (
+                <div className="p-2 text-xs text-muted-foreground italic">No bookmarks</div>
+              ) : (
+                bookmarks.map(path => (
+                  <div
+                    key={path}
+                    className="px-3 py-2 hover:bg-secondary cursor-pointer text-xs truncate flex justify-between items-center"
+                    onClick={() => loadFiles(path)}
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))
-            )}
+                    <span className="truncate flex-1" title={path}>{path}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleBookmark(path); }}
+                      className="text-muted-foreground hover:text-destructive ml-2"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        <button onClick={() => loadFiles(currentPath, true)} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-        <button onClick={handleUpload} className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Upload">
-          <Upload className="w-4 h-4" />
-        </button>
+        {/* Filter Input */}
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-2 top-2 text-muted-foreground pointer-events-none" />
+          <input
+            className="w-full h-7 pl-7 pr-2 text-xs bg-muted/40 border-none rounded focus:ring-1 focus:ring-primary outline-none placeholder:text-muted-foreground/50"
+            placeholder="Filter files..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* File Table Header */}
+      <div className="grid grid-cols-[1fr_80px_120px] gap-2 px-3 py-1.5 border-b border-border text-[10px] uppercase font-bold text-muted-foreground/70 bg-muted/20 select-none">
+        <div className="flex items-center gap-1 cursor-pointer hover:text-foreground" onClick={() => toggleSort('name')}>
+          Name <SortIcon field="name" />
+        </div>
+        <div className="flex items-center gap-1 cursor-pointer hover:text-foreground justify-end" onClick={() => toggleSort('size')}>
+          Size <SortIcon field="size" />
+        </div>
+        <div className="flex items-center gap-1 cursor-pointer hover:text-foreground justify-end" onClick={() => toggleSort('date')}>
+          Date <SortIcon field="date" />
+        </div>
       </div>
 
       {/* File List */}
       <div
-        className="flex-1 overflow-auto bg-background"
+        className="flex-1 overflow-auto"
         onContextMenu={(e) => onContextMenu(e)}
       >
         <div className="flex flex-col min-h-full">
-          {files.map((file, i) => (
+          {sortedAndFilteredFiles.map((file, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-secondary cursor-pointer text-sm group transition-colors select-none"
+              className={cn(
+                "grid grid-cols-[1fr_80px_120px] gap-2 px-3 py-1.5 cursor-pointer text-xs group transition-colors select-none items-center border-b border-transparent hover:border-border/30",
+                "hover:bg-primary/5 active:bg-primary/10"
+              )}
               onClick={() => file.type === 'd' && handleNavigate(file)}
               onDoubleClick={() => {
                 if (file.type === '-') {
@@ -386,25 +459,31 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
               }}
               onContextMenu={(e) => onContextMenu(e, file)}
             >
-              {file.type === 'd' ?
-                <Folder className="w-4 h-4 text-blue-400 shrink-0" /> :
-                <File className="w-4 h-4 text-muted-foreground shrink-0" />
-              }
-              <span className="truncate flex-1 text-foreground">{file.name}</span>
-              <span className="text-xs text-muted-foreground w-16 text-right tabular-nums">
-                {file.type === '-' ? (file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`) : ''}
-              </span>
+              <div className="flex items-center gap-2 min-w-0">
+                {file.type === 'd' ?
+                  <Folder className="w-4 h-4 text-blue-400 shrink-0 fill-blue-400/20" /> :
+                  <File className="w-4 h-4 text-muted-foreground shrink-0" />
+                }
+                <span className="truncate text-foreground/90 font-medium">{file.name}</span>
+              </div>
+
+              <div className="text-right text-muted-foreground/70 font-mono tabular-nums">
+                {file.type === '-' ? (file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`) : '-'}
+              </div>
+
+              <div className="text-right text-muted-foreground/60 font-mono text-[10px]">
+                {file.date ? (new Date(file.date).toLocaleDateString()) : '-'}
+              </div>
             </div>
           ))}
           {/* Fill clickable space for context menu */}
-          <div className="flex-1 min-h-[50px]" />
+          <div className="flex-1 min-h-[50px] bg-transparent" />
         </div>
       </div>
 
       {/* Context Menu */}
       {contextMenu && createPortal(
         <>
-          {/* Backdrop to close menu on click outside */}
           <div
             className="fixed inset-0 z-[10002]"
             onClick={() => setContextMenu(null)}
@@ -414,7 +493,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
             }}
           />
           <div
-            className="fixed bg-popover border border-border shadow-xl rounded py-1 z-[10003] w-44 text-popover-foreground animate-in fade-in zoom-in-95 duration-100"
+            className="fixed bg-popover/90 backdrop-blur-md border border-border shadow-xl rounded py-1 z-[10003] w-48 text-popover-foreground animate-in fade-in zoom-in-95 duration-100"
             style={{
               top: Math.min(contextMenu.y, window.innerHeight - 200),
               left: Math.min(contextMenu.x, window.innerWidth - 180)
@@ -422,7 +501,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
           >
             {contextMenu.file ? (
               <>
-                <div className="px-3 py-1 text-xs text-muted-foreground border-b border-border mb-1 truncate font-medium">
+                <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 mb-1 truncate font-semibold bg-muted/20">
                   {contextMenu.file.name}
                 </div>
                 <button onClick={() => {
@@ -431,45 +510,45 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
                     handleFileOpen(contextMenu.file, path);
                     setContextMenu(null);
                   }
-                }} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm disabled:opacity-50" disabled={contextMenu.file.type !== '-'}>
+                }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm disabled:opacity-50 transition-colors" disabled={contextMenu.file.type !== '-'}>
                   <Edit2 className="w-3.5 h-3.5" /> Edit
                 </button>
                 <button onClick={() => {
                   if (contextMenu.file) handleDownload(contextMenu.file);
                   setContextMenu(null);
-                }} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm">
+                }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
                   <Download className="w-3.5 h-3.5" /> Download
                 </button>
                 <button onClick={() => {
                   if (contextMenu.file) handleRename(contextMenu.file);
                   setContextMenu(null);
-                }} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm">
+                }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
                   <Edit2 className="w-3.5 h-3.5" /> Rename
                 </button>
                 <button onClick={() => {
                   if (contextMenu.file) handleDelete(contextMenu.file);
                   setContextMenu(null);
-                }} className="w-full text-left px-3 py-1.5 hover:bg-destructive/10 text-destructive flex items-center gap-2 text-sm">
+                }} className="w-full text-left px-3 py-1.5 hover:bg-destructive/10 text-destructive flex items-center gap-2 text-sm transition-colors">
                   <Trash2 className="w-3.5 h-3.5" /> Delete
                 </button>
-                <div className="h-px bg-border my-1" />
+                <div className="h-px bg-border/50 my-1" />
               </>
             ) : (
-              <div className="px-3 py-1 text-xs text-muted-foreground border-b border-border mb-1 font-medium">
-                Actions
+              <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 mb-1 font-semibold bg-muted/20">
+                Current Folder
               </div>
             )}
 
-            <button onClick={handleCreateFile} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm text-primary">
+            <button onClick={handleCreateFile} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
               <Plus className="w-3.5 h-3.5" /> New File
             </button>
-            <button onClick={handleCreateFolder} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm text-primary">
+            <button onClick={handleCreateFolder} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
               <FolderPlus className="w-3.5 h-3.5" /> New Folder
             </button>
-            <button onClick={() => { handleUpload(); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm">
+            <button onClick={() => { handleUpload(); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm transition-colors">
               <Upload className="w-3.5 h-3.5" /> Upload File
             </button>
-            <button onClick={() => { loadFiles(currentPath, true); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-secondary flex items-center gap-2 text-sm border-t border-border mt-1 pt-2">
+            <button onClick={() => { loadFiles(currentPath, true); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-primary/10 hover:text-primary flex items-center gap-2 text-sm border-t border-border/50 mt-1 pt-2 transition-colors">
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
           </div>
@@ -491,9 +570,9 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
       )}
       {/* Custom Input Dialog */}
       {inputDialog && createPortal(
-        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-background/40 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-background/60 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-card border border-border shadow-2xl rounded-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-4 py-3 border-b border-border bg-muted/50 font-medium text-sm flex justify-between items-center">
+            <div className="px-4 py-3 border-b border-border bg-muted/30 font-medium text-sm flex justify-between items-center">
               {inputDialog.title}
               <button onClick={() => setInputDialog(null)} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />

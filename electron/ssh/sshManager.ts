@@ -1,5 +1,5 @@
 import { Client, ClientChannel } from 'ssh2';
-import { createServer, Server, Socket } from 'net';
+
 import { SSHConnection, SystemStats, FileEntry, CpuCore } from '../../src/shared/types';
 import { WebContents, dialog } from 'electron';
 import { readFileSync } from 'fs';
@@ -11,7 +11,7 @@ export class SSHManager {
     private intervals: Map<string, NodeJS.Timeout> = new Map();
     private prevCpu: any = null;
     private prevNet: any = null;
-    private tunnels: Map<string, { id: string, name?: string, type: 'L' | 'R', active: boolean, config: any, server?: Server }[]> = new Map();
+
     private profileIds: Map<string, string> = new Map();
     private store: any;
 
@@ -30,11 +30,6 @@ export class SSHManager {
                 this.connections.set(sessionId, conn);
                 if (profileId) {
                     this.profileIds.set(sessionId, profileId);
-                    try {
-                        await this.loadSavedTunnels(sessionId, profileId);
-                    } catch (err) {
-                        console.error(`[SSH] Failed to load tunnels for session ${sessionId}:`, err);
-                    }
                 }
 
                 conn.shell((err, stream) => {
@@ -74,30 +69,7 @@ export class SSHManager {
                 this.cleanup(sessionId);
             });
 
-            (conn as any).on('tcpip', (accept: any, reject: any, info: any) => {
-                const tunnels = this.tunnels.get(sessionId) || [];
-                const tunnel = tunnels.find(t => t.type === 'R' && t.config.srcPort === info.destPort);
 
-                if (tunnel) {
-                    console.log(`[Tunnel] Incoming R-forwarded connection on port ${info.destPort}`);
-                    const stream = accept();
-                    const socket = new Socket();
-
-                    socket.on('error', (err) => {
-                        console.error(`[Tunnel] Socket error:`, err);
-                        stream.end();
-                    });
-                    stream.on('close', () => socket.end());
-
-                    socket.connect(tunnel.config.dstPort, tunnel.config.dstAddr || '127.0.0.1', () => {
-                        stream.pipe(socket);
-                        socket.pipe(stream);
-                    });
-                } else {
-                    console.warn(`[Tunnel] Rejected incoming request on port ${info.destPort} (no tunnel found)`);
-                    reject();
-                }
-            });
 
             try {
                 const config: any = {
@@ -145,16 +117,7 @@ export class SSHManager {
             this.connections.delete(id);
         }
 
-        // Close local servers
-        const tunnels = this.tunnels.get(id);
-        if (tunnels) {
-            tunnels.forEach(t => {
-                if (t.type === 'L' && t.server) {
-                    try { t.server.close(); } catch (e) { }
-                }
-            });
-            this.tunnels.delete(id);
-        }
+
         this.profileIds.delete(id);
     }
 
@@ -448,221 +411,7 @@ export class SSHManager {
         });
     }
 
-    async addTunnel(id: string, type: 'L' | 'R', config: { srcAddr: string, srcPort: number, dstAddr: string, dstPort: number }, name?: string): Promise<string> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
 
-        const tunnelId = Date.now().toString();
-        const tunnels = this.tunnels.get(id) || [];
-        const profileId = this.profileIds.get(id);
-
-        const newTunnel = { id: tunnelId, name, type, active: true, config };
-
-        // If profile exists, save to store
-        if (profileId && this.store) {
-            const saved = this.store.get(`tunnels_${profileId}`) || [];
-            saved.push(newTunnel);
-            this.store.set(`tunnels_${profileId}`, saved);
-        }
-
-        if (type === 'L') {
-            // Local Forwarding: Local Port -> Remote Host:Port
-            // We listen on Local Port (srcPort), and forward to Remote (dstAddr:dstPort) via SSH
-            return new Promise((resolve, reject) => {
-                const server = createServer((socket) => {
-                    console.log(`[Tunnel] New connection on local port ${config.srcPort}`);
-                    conn.forwardOut(config.srcAddr || '127.0.0.1', config.srcPort, config.dstAddr, config.dstPort, (err, stream) => {
-                        if (err) {
-                            console.error(`[Tunnel] Forwarding failed:`, err);
-                            socket.end();
-                            return;
-                        }
-                        console.log(`[Tunnel] Forwarding established: local:${config.srcPort} -> remote:${config.dstAddr}:${config.dstPort}`);
-                        socket.pipe(stream);
-                        stream.pipe(socket);
-                        socket.on('close', () => console.log(`[Tunnel] Local connection closed`));
-                    });
-                });
-
-                server.listen(config.srcPort, config.srcAddr || '127.0.0.1', () => {
-                    tunnels.push({ id: tunnelId, name, type, active: true, config, server });
-                    this.tunnels.set(id, tunnels);
-                    resolve(tunnelId);
-                });
-
-                server.on('error', (err) => reject(err));
-            });
-        } else {
-            // Remote Forwarding: Remote Port -> Local Host:Port
-            // We ask SSH server to listen on Remote Port (srcPort), and forward to us.
-            // When we receive connection, we connect to Local (dstAddr:dstPort).
-            return new Promise((resolve, reject) => {
-                conn.forwardIn(config.srcAddr || '0.0.0.0', config.srcPort, (err) => {
-                    if (err) return reject(err);
-
-                    // Note: We need to handle 'tcpip' event on connection for incoming forwarded connections
-                    // But we might already have other tunnels. 
-                    // Use a shared handler or check if already listening?
-                    // ssh2 emits 'tcpip' for ALL forwarded connections.
-                    // We need to ensure we have a listener.
-                    // For simplicity, we assume one global listener per connection that routes based on port.
-                    // But here we are just adding one.
-
-                    // Actually, let's attach the listener if it's the first remote tunnel
-                    // Or we can just attach it. ssh2 supports multiple listeners? No, usually one.
-                    // But we can check if it's already listening.
-                    // A better approach: The 'tcpip' handler should check against our active 'R' tunnels.
-
-                    tunnels.push({ id: tunnelId, name, type, active: true, config });
-                    this.tunnels.set(id, tunnels);
-                    resolve(tunnelId);
-                });
-            });
-        }
-    }
-
-    async toggleTunnel(id: string, tunnelId: string, active: boolean): Promise<void> {
-        const tunnels = this.tunnels.get(id) || [];
-        const tunnel = tunnels.find(t => t.id === tunnelId);
-        const profileId = this.profileIds.get(id);
-        const conn = this.connections.get(id);
-
-        if (!tunnel) throw new Error('Tunnel not found');
-        if (tunnel.active === active) return;
-
-        if (active) {
-            // Start the tunnel
-            if (tunnel.type === 'L') {
-                await new Promise<void>((resolve, reject) => {
-                    const server = createServer((socket) => {
-                        conn!.forwardOut(tunnel.config.srcAddr || '127.0.0.1', tunnel.config.srcPort, tunnel.config.dstAddr, tunnel.config.dstPort, (err, stream) => {
-                            if (err) { socket.end(); return; }
-                            socket.pipe(stream);
-                            stream.pipe(socket);
-                        });
-                    });
-                    server.listen(tunnel.config.srcPort, tunnel.config.srcAddr || '127.0.0.1', () => {
-                        tunnel.server = server;
-                        resolve();
-                    });
-                    server.on('error', (err) => reject(err));
-                });
-            } else {
-                await new Promise<void>((resolve, reject) => {
-                    conn!.forwardIn(tunnel.config.srcAddr || '0.0.0.0', tunnel.config.srcPort, (err) => {
-                        if (err) return reject(err);
-                        resolve();
-                    });
-                });
-            }
-        } else {
-            // Stop the tunnel
-            if (tunnel.type === 'L' && tunnel.server) {
-                tunnel.server.close();
-                tunnel.server = undefined;
-            } else if (tunnel.type === 'R' && conn) {
-                await new Promise<void>((resolve) => {
-                    conn.unforwardIn(tunnel.config.srcAddr || '0.0.0.0', tunnel.config.srcPort, () => resolve());
-                });
-            }
-        }
-
-        tunnel.active = active;
-
-        // Update store
-        if (profileId && this.store) {
-            const saved = this.store.get(`tunnels_${profileId}`) || [];
-            const idx = saved.findIndex((s: any) => s.id === tunnelId);
-            if (idx !== -1) {
-                saved[idx].active = active;
-                this.store.set(`tunnels_${profileId}`, saved);
-            }
-        }
-    }
-
-    async removeTunnel(id: string, tunnelId: string): Promise<void> {
-        const tunnels = this.tunnels.get(id);
-        if (!tunnels) return;
-
-        const index = tunnels.findIndex(t => t.id === tunnelId);
-        if (index === -1) return;
-
-        const tunnel = tunnels[index];
-        const conn = this.connections.get(id);
-
-        if (tunnel.type === 'L' && tunnel.server) {
-            tunnel.server.close();
-        } else if (tunnel.type === 'R' && conn) {
-            conn.unforwardIn(tunnel.config.srcAddr || '0.0.0.0', tunnel.config.srcPort, () => { });
-        }
-
-        tunnels.splice(index, 1);
-        this.tunnels.set(id, tunnels);
-
-        // Update store
-        const profileId = this.profileIds.get(id);
-        if (profileId && this.store) {
-            const saved = this.store.get(`tunnels_${profileId}`) || [];
-            const newSaved = saved.filter((s: any) => s.id !== tunnelId);
-            this.store.set(`tunnels_${profileId}`, newSaved);
-        }
-    }
-
-    async getTunnels(id: string): Promise<any[]> {
-        return (this.tunnels.get(id) || []).map(t => ({
-            id: t.id,
-            name: t.name,
-            type: t.type,
-            active: t.active,
-            config: t.config
-        }));
-    }
-
-    private async loadSavedTunnels(connectionId: string, profileId: string) {
-        if (!this.store) return;
-        const saved = this.store.get(`tunnels_${profileId}`) || [];
-        const tunnels: any[] = [];
-        this.tunnels.set(connectionId, tunnels);
-
-        const conn = this.connections.get(connectionId);
-        if (!conn) return;
-
-        for (const tConfig of saved) {
-            const tunnel = { ...tConfig };
-            tunnels.push(tunnel);
-
-            if (tunnel.active) {
-                try {
-                    if (tunnel.type === 'L') {
-                        const server = createServer((socket) => {
-                            conn.forwardOut(tunnel.config.srcAddr || '127.0.0.1', tunnel.config.srcPort, tunnel.config.dstAddr, tunnel.config.dstPort, (err, stream) => {
-                                if (err) { socket.end(); return; }
-                                socket.pipe(stream);
-                                stream.pipe(socket);
-                            });
-                        });
-                        await new Promise<void>((resolve, reject) => {
-                            server.listen(tunnel.config.srcPort, tunnel.config.srcAddr || '127.0.0.1', () => {
-                                tunnel.server = server;
-                                resolve();
-                            });
-                            server.on('error', (err) => reject(err));
-                        });
-                    } else {
-                        await new Promise<void>((resolve, reject) => {
-                            conn.forwardIn(tunnel.config.srcAddr || '0.0.0.0', tunnel.config.srcPort, (err) => {
-                                if (err) return reject(err);
-                                resolve();
-                            });
-                        });
-                    }
-                } catch (err) {
-                    console.error(`Failed to auto-start tunnel ${tunnel.id}:`, err);
-                    tunnel.active = false;
-                }
-            }
-        }
-    }
 
     private parseStats(output: string): SystemStats | null {
         try {

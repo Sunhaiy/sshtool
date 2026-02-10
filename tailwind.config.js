@@ -71,6 +71,14 @@ module.exports = {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },
+      fontSize: {
+        'tiny': '0.625rem', // 10px
+        'body': ['0.75rem', { lineHeight: '1rem' }], // 12px
+      },
+      fontFamily: {
+        sans: ['var(--font-ui)', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

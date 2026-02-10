@@ -59,7 +59,7 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
     return (
         <div className="h-full flex flex-col bg-background text-foreground">
             {/* Header */}
-            <div className="p-3 border-b border-border flex items-center justify-between">
+            <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
                     <Container className="w-4 h-4 text-blue-500" />
                     <span>Containers</span>
@@ -71,7 +71,7 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {error && (
                     <div className="p-4 rounded bg-destructive/10 text-destructive text-sm flex items-center gap-2">
                         <AlertCircle className="w-4 h-4" />
@@ -86,7 +86,7 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
                 )}
 
                 {containers.map(container => (
-                    <div key={container.id} className="bg-card border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                    <div key={container.id} className="bg-card border border-border rounded-lg p-3 shadow-none hover:border-primary/50 transition-colors">
                         <div className="flex items-start justify-between mb-2">
                             <div className="min-w-0">
                                 <div className="font-medium text-sm truncate flex items-center gap-2" title={container.name}>
@@ -97,7 +97,7 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
                                     {container.image}
                                 </div>
                             </div>
-                            <div className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded ml-2 whitespace-nowrap">
+                            <div className="text-[10px] font-medium text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded ml-2 whitespace-nowrap">
                                 {container.id.substring(0, 12)}
                             </div>
                         </div>

@@ -21,18 +21,7 @@ export interface CpuCore {
   usage: number;
 }
 
-export interface SSHTunnel {
-  id: string;
-  name?: string;
-  type: 'L' | 'R';
-  active: boolean;
-  config: {
-    srcAddr: string;
-    srcPort: number;
-    dstAddr: string;
-    dstPort: number;
-  };
-}
+
 
 export interface SystemStats {
   os: {

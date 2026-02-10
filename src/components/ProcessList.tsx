@@ -107,12 +107,12 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                             <tbody>
                                 {processes.map(proc => (
                                     <tr key={proc.pid} className="border-b border-border/50 hover:bg-secondary/50 transition-colors group">
-                                        <td className="px-4 py-2 font-mono text-xs">{proc.pid}</td>
-                                        <td className="px-4 py-2">{proc.user}</td>
-                                        <td className={`px-4 py-2 font-mono ${proc.cpu > 50 ? 'text-red-500 font-bold' : proc.cpu > 20 ? 'text-yellow-500' : ''}`}>
-                                            {proc.cpu.toFixed(1)}
+                                        <td className="px-4 py-2 font-medium tabular-nums text-xs">{proc.pid}</td>
+                                        <td className="px-4 py-2 font-medium">{proc.user}</td>
+                                        <td className={`px-4 py-2 font-medium tabular-nums ${proc.cpu > 50 ? 'text-red-500 font-bold' : proc.cpu > 20 ? 'text-yellow-500' : ''}`}>
+                                            {proc.cpu.toFixed(1)}%
                                         </td>
-                                        <td className="px-4 py-2 font-mono">{proc.mem.toFixed(1)}</td>
+                                        <td className="px-4 py-2 font-medium tabular-nums">{proc.mem.toFixed(1)}</td>
                                         <td className="px-4 py-2 max-w-[200px] truncate" title={proc.args || proc.command}>
                                             <span className="font-medium">{proc.command}</span>
                                             <span className="text-muted-foreground text-xs ml-2 opacity-70">{proc.args}</span>

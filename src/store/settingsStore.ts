@@ -52,13 +52,17 @@ interface SettingsState {
     setAiPrivacyMode: (enabled: boolean) => void;
     setAiSendShortcut: (shortcut: 'enter' | 'ctrlEnter') => void;
 
+    // Bookmarks
+    bookmarks: string[];
+    toggleBookmark: (path: string) => void;
+
     initSettings: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     language: 'en',
     uiFontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-    terminalFontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+    terminalFontFamily: "'Inter', monospace",
     fontSize: 14,
     lineHeight: 1.2,
     letterSpacing: 0,
@@ -201,6 +205,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         window.electron.storeSet('aiSendShortcut', shortcut);
     },
 
+    // Bookmarks
+    bookmarks: [],
+    toggleBookmark: (path: string) => {
+        const state = get();
+        const newBookmarks = state.bookmarks.includes(path)
+            ? state.bookmarks.filter(b => b !== path)
+            : [...state.bookmarks, path];
+        set({ bookmarks: newBookmarks });
+        window.electron.storeSet('bookmarks', newBookmarks);
+    },
+
     initSettings: async () => {
         const savedLang = await window.electron.storeGet('language');
         const savedUiFont = await window.electron.storeGet('uiFontFamily');
@@ -219,10 +234,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const savedBrightBold = await window.electron.storeGet('brightBold');
         const savedBellStyle = await window.electron.storeGet('bellStyle');
 
+        // Load Bookmarks
+        const savedBookmarks = await window.electron.storeGet('bookmarks');
+
         set({
             language: (savedLang as Language) || 'en',
             uiFontFamily: (savedUiFont as string) || "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-            terminalFontFamily: (savedTerminalFont as string) || (oldFontFamily as string) || "'JetBrains Mono', 'Fira Code', monospace",
+            terminalFontFamily: (savedTerminalFont as string) || (oldFontFamily as string) || "'Inter', monospace",
             fontSize: (savedFontSize as number) || 14,
             lineHeight: (savedLineHeight as number) || 1.2,
             letterSpacing: (savedLetterSpacing as number) || 0,
@@ -233,6 +251,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             scrollback: (savedScrollback as number) || 5000,
             brightBold: typeof savedBrightBold === 'boolean' ? savedBrightBold : true,
             bellStyle: (savedBellStyle as 'none' | 'visual' | 'sound') || 'none',
+
+            bookmarks: Array.isArray(savedBookmarks) ? savedBookmarks : [],
         });
 
         // Load AI settings

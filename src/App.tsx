@@ -48,7 +48,7 @@ function App() {
   }, [initTheme, initSettings]);
 
   useEffect(() => {
-    document.body.style.fontFamily = uiFontFamily;
+    document.documentElement.style.setProperty('--font-ui', uiFontFamily);
   }, [uiFontFamily]);
 
   const handleConnect = async (connection: SSHConnection) => {
@@ -142,7 +142,7 @@ function App() {
               {sessions.map(session => (
                 <div
                   key={session.uniqueId}
-                  className="absolute inset-0 z-0 bg-background"
+                  className="absolute inset-0 z-0 bg-transparent"
                   style={{
                     visibility: session.uniqueId === activeSessionId ? 'visible' : 'hidden',
                     zIndex: session.uniqueId === activeSessionId ? 10 : 0

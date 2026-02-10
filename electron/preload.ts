@@ -42,10 +42,7 @@ contextBridge.exposeInMainWorld('electron', {
   getDockerContainers: (id: string) => ipcRenderer.invoke('docker-list', id),
   dockerAction: (id: string, containerId: string, action: string) => ipcRenderer.invoke('docker-action', { id, containerId, action }),
 
-  addTunnel: (id: string, type: 'L' | 'R', config: any, name?: string) => ipcRenderer.invoke('tunnel-add', { id, type, config, name }),
-  removeTunnel: (id: string, tunnelId: string) => ipcRenderer.invoke('tunnel-remove', { id, tunnelId }),
-  tunnelToggle: ({ id, tunnelId, active }: { id: string, tunnelId: string, active: boolean }) => ipcRenderer.invoke('tunnel-toggle', { id, tunnelId, active }),
-  getTunnels: (id: string) => ipcRenderer.invoke('tunnel-list', id),
+
 
   onSSHStatus: (callback: (event: any, payload: { id: string, status: string }) => void) => {
     const subscription = (event: any, payload: any) => callback(event, payload);

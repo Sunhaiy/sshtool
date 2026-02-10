@@ -14,7 +14,7 @@ interface TerminalViewProps {
 export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const { theme, terminalTheme } = useThemeStore();
+  const { terminalTheme } = useThemeStore();
   const {
     terminalFontFamily,
     fontSize,
@@ -39,62 +39,16 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
   // AI Popover State
   const [aiPopover, setAiPopover] = useState<{ x: number; y: number; text: string; type: 'explain' | 'fix' } | null>(null);
 
-  useEffect(() => {
-    if (!termRef.current) return;
-
-    // Update terminal theme when app theme changes
-    if (termRef.current && theme.terminal) {
-      termRef.current.options.theme = {
-        ...theme.terminal,
-        selectionBackground: theme.terminal.selectionBackground
-      };
-    }
-  }, [theme]);
-
-  // Handle Theme Change
-  useEffect(() => {
-    if (termRef.current && terminalTheme) {
-      termRef.current.options.theme = terminalTheme;
-    }
-  }, [terminalTheme]);
-
-  // Dynamic settings updates
-  useEffect(() => {
-    if (!termRef.current) return;
-    termRef.current.options.fontFamily = terminalFontFamily;
-    termRef.current.options.fontSize = fontSize;
-    termRef.current.options.lineHeight = lineHeight;
-    termRef.current.options.letterSpacing = letterSpacing;
-    termRef.current.options.cursorStyle = cursorStyle;
-    termRef.current.options.cursorBlink = cursorBlink;
-    termRef.current.options.scrollback = scrollback;
-    termRef.current.options.drawBoldTextInBrightColors = brightBold;
-    // @ts-ignore
-    termRef.current.options.bellStyle = bellStyle;
-
-    // Handle WebGL toggle dynamically?
-    // It's tricky to toggle WebGL without disposing.
-    // For now we just recommend reload if changing renderer,
-    // or we could try to load/dispose addon here.
-    // Let's stick to initial load for renderer to avoid complexity/crashes.
-
-    // Trigger fit after font size/spacing changes
-    // @ts-ignore
-    try { termRef.current?._addonManager?.addons?.forEach(addon => { if (addon.constructor.name === 'FitAddon') addon.fit(); }); } catch (e) { }
-  }, [terminalFontFamily, fontSize, lineHeight, letterSpacing, cursorStyle, cursorBlink, scrollback, brightBold, bellStyle]);
-
+  // Effect to handle initialization
   useEffect(() => {
     if (!containerRef.current || !connectionId) return;
 
-    // Import WebGL Addon dynamically only if needed?
-    // We already removed the static import to fix crash.
-    // If we want to support it, we need to dynamically import it or have it available.
-    // To support WebGL safely, we should lazy import it inside the effect.
+    let cleanupFn: (() => void) | undefined;
 
     const initTerminal = async () => {
       // Use current values from store for initialization
       const settings = useSettingsStore.getState();
-      const currentTerminalTheme = useThemeStore.getState().theme.terminal; // Get latest terminal theme
+      const currentTerminalTheme = useThemeStore.getState().terminalTheme;
 
       const term = new Terminal({
         cursorBlink: settings.cursorBlink,
@@ -108,21 +62,24 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         // @ts-ignore
         bellStyle: settings.bellStyle,
         allowProposedApi: true,
+        allowTransparency: true,
         theme: {
+          background: 'transparent',
           ...(currentTerminalTheme || {}),
         }
       });
 
+      termRef.current = term; // Set ref immediately
+
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
 
-      // Open terminal first
+      // Open terminal
       term.open(containerRef.current!);
 
       // Load WebGL if enabled
       if (rendererType === 'webgl') {
         try {
-          // Dynamic import to avoid crash if not available/supported
           const { WebglAddon } = await import('@xterm/addon-webgl');
           const webglAddon = new WebglAddon();
           webglAddon.onContextLoss(() => {
@@ -140,14 +97,12 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       } catch (e) {
         console.warn('Initial fit failed:', e);
       }
-      term.open(containerRef.current!);
-      term.focus(); // Focus immediately on mount
+      term.focus();
 
       term.onData(data => {
         (window as any).electron.writeTerminal(connectionId, data);
       });
 
-      // Store cleanup function
       const cleanup = (window as any).electron.onTerminalData((_: any, { id, data }: { id: string, data: string }) => {
         if (id === connectionId) {
           term.write(data);
@@ -184,33 +139,25 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       });
       resizeObserver.observe(containerRef.current!);
 
-      // Cleanup function for useEffect
       return () => {
         window.removeEventListener('contextmenu', handleNativeContextMenu, true);
         try {
           cleanup();
-        } catch (e) {
-          console.warn('Terminal data listener cleanup failed:', e);
-        }
+        } catch (e) { }
         resizeObserver.disconnect();
         try {
-          // Dispose terminal - wrapped in try-catch to handle WebGL addon issues
           if (term && !term.element?.parentElement) {
-            // Terminal already detached from DOM, skip dispose
-            console.log('Terminal already detached, skipping dispose');
+            // already detached
           } else if (term) {
             term.dispose();
           }
-        } catch (e) {
-          console.warn('Terminal dispose failed (WebGL addon issue):', e);
-        }
+        } catch (e) { }
         termRef.current = null;
       };
     };
 
     // We need to manage cleanup manually since initTerminal is async
     let isMounted = true;
-    let cleanupFn: (() => void) | undefined;
 
     initTerminal().then(fn => {
       if (isMounted) {
@@ -225,7 +172,33 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       isMounted = false;
       if (cleanupFn) cleanupFn();
     };
-  }, [connectionId, rendererType]); // Only re-init if connectionId or renderer type changes (canvas vs webgl)
+  }, [connectionId, rendererType]);
+
+  // Effect to handle dynamic updates (font, theme, etc.)
+  useEffect(() => {
+    if (!termRef.current) return;
+
+    // Theme
+    if (terminalTheme) {
+      termRef.current.options.theme = terminalTheme;
+    }
+
+    // Settings
+    termRef.current.options.fontFamily = terminalFontFamily;
+    termRef.current.options.fontSize = fontSize;
+    termRef.current.options.lineHeight = lineHeight;
+    termRef.current.options.letterSpacing = letterSpacing;
+    termRef.current.options.cursorStyle = cursorStyle;
+    termRef.current.options.cursorBlink = cursorBlink;
+    termRef.current.options.scrollback = scrollback;
+    termRef.current.options.drawBoldTextInBrightColors = brightBold;
+    // @ts-ignore
+    termRef.current.options.bellStyle = bellStyle;
+
+    // Trigger fit
+    // @ts-ignore
+    try { termRef.current?._addonManager?.addons?.forEach(addon => { if (addon.constructor.name === 'FitAddon') addon.fit(); }); } catch (e) { }
+  }, [terminalTheme, terminalFontFamily, fontSize, lineHeight, letterSpacing, cursorStyle, cursorBlink, scrollback, brightBold, bellStyle]);
 
   const handleCopy = () => {
     console.log('handleCopy called, selection:', selectionText);
@@ -278,7 +251,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       <div
         ref={containerRef}
         className="h-full w-full"
-        style={{ background: theme?.terminal?.background || '#000' }}
+        style={{ background: 'transparent' }}
       />
 
       {menuPos && (

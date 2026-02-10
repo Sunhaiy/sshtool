@@ -77,7 +77,7 @@ export function ConnectionManager({ onConnect, onNavigate }: ConnectionManagerPr
 
   return (
     <div className="flex flex-col h-full p-6 bg-background">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold tracking-tight">SSH Tool</h1>
         <Button variant="outline" size="icon" onClick={() => onNavigate('settings')}>
           <SettingsIcon className="w-5 h-5" />
@@ -99,7 +99,7 @@ export function ConnectionManager({ onConnect, onNavigate }: ConnectionManagerPr
 
           {/* Connection Cards */}
           {connections.map(c => (
-            <Card key={c.id} className="group relative overflow-hidden border-muted/40 hover:border-primary/50 transition-all duration-200 hover:shadow-lg">
+            <Card key={c.id} className="group relative overflow-hidden border-muted/40 hover:border-primary/50 transition-colors shadow-none">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
                   <div className="bg-primary/10 p-2 rounded-lg">
@@ -117,7 +117,7 @@ export function ConnectionManager({ onConnect, onNavigate }: ConnectionManagerPr
                   </div>
                 </div>
                 <CardTitle className="mt-4 truncate text-lg pr-4" title={c.name}>{c.name}</CardTitle>
-                <div className="text-sm text-muted-foreground truncate font-mono mt-1">
+                <div className="text-sm text-muted-foreground truncate font-medium mt-1">
                   {c.username}@{c.host}
                 </div>
               </CardHeader>

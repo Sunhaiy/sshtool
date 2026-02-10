@@ -1,46 +1,120 @@
+
 import { create } from 'zustand';
-import { Theme, ThemeId, themes, TerminalTheme, TerminalThemeId, terminalThemes } from '../shared/themes';
+import {
+  BaseThemeId,
+  AccentColorId,
+  TerminalTheme,
+  TerminalThemeId,
+  baseThemes,
+  accentColors,
+  terminalThemes,
+  ThemeColors
+} from '../shared/themes';
 
 interface ThemeState {
-  currentThemeId: ThemeId;
+  baseThemeId: BaseThemeId;
+  accentColorId: AccentColorId;
   currentTerminalThemeId: TerminalThemeId;
-  theme: Theme;
+
+  // Computed theme for compatibility and usage
+  theme: {
+    type: 'light' | 'dark';
+    colors: ThemeColors;
+  };
+
   terminalTheme: TerminalTheme;
   opacity: number;
-  setTheme: (id: ThemeId) => void;
+
+  setBaseTheme: (id: BaseThemeId) => void;
+  setAccentColor: (id: AccentColorId) => void;
   setTerminalTheme: (id: TerminalThemeId) => void;
   setOpacity: (opacity: number) => void;
   initTheme: () => Promise<void>;
 }
 
+// Helper to generate full theme colors
+const generateThemeColors = (baseId: BaseThemeId, accentId: AccentColorId): ThemeColors => {
+  const base = baseThemes[baseId];
+  const accent = accentColors[accentId];
+
+  return {
+    ...base.colors,
+    primary: accent.color,
+    primaryForeground: accent.foreground,
+    ring: accent.color,
+    // Use accent color for accent tokens as well for consistency in this design
+    accent: base.colors.secondary, // Keep secondary as accent background usually
+    accentForeground: base.colors.secondaryForeground,
+
+    // We can also make 'accent' token use the color if we want colored accents, 
+    // but usually 'accent' in shadcn/tailwind is for hover states of list items.
+    // Hoppscotch uses the primary color for active states.
+
+    destructive: "0 84.2% 60.2%", // Standard red
+    destructiveForeground: "0 0% 98%",
+  };
+};
+
+// Helper to apply theme to DOM
+const applyTheme = (baseId: BaseThemeId, accentId: AccentColorId) => {
+  const root = document.documentElement;
+  const base = baseThemes[baseId];
+  const colors = generateThemeColors(baseId, accentId);
+
+  // Set class for dark/light mode
+  if (base.type === 'dark') {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+
+  // Set CSS variables
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--${key}`, value);
+  });
+};
+
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  currentThemeId: 'zangqing',
-  currentTerminalThemeId: 'zangqing',
-  theme: themes['zangqing'],
-  terminalTheme: terminalThemes['zangqing'],
+  baseThemeId: 'dark',
+  accentColorId: 'indigo',
+  currentTerminalThemeId: 'default',
+
+  theme: {
+    type: 'dark',
+    colors: generateThemeColors('dark', 'indigo')
+  },
+
+  terminalTheme: terminalThemes['default'],
   opacity: 0.9,
 
-  setTheme: (id: ThemeId) => {
-    const theme = themes[id];
-    set({ currentThemeId: id, theme });
-
-    // Apply CSS variables
-    const root = document.documentElement;
-
-    // Set class for dark/light mode for Tailwind
-    if (theme.type === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-
-    // Set CSS variables
-    Object.entries(theme.colors).forEach(([key, value]) => {
-      root.style.setProperty(`--${key}`, value);
+  setBaseTheme: (id: BaseThemeId) => {
+    set((state) => {
+      const newColors = generateThemeColors(id, state.accentColorId);
+      applyTheme(id, state.accentColorId);
+      (window as any).electron.storeSet('baseTheme', id);
+      return {
+        baseThemeId: id,
+        theme: {
+          type: baseThemes[id].type,
+          colors: newColors
+        }
+      };
     });
+  },
 
-    // Persist
-    (window as any).electron.storeSet('theme', id);
+  setAccentColor: (id: AccentColorId) => {
+    set((state) => {
+      const newColors = generateThemeColors(state.baseThemeId, id);
+      applyTheme(state.baseThemeId, id);
+      (window as any).electron.storeSet('accentColor', id);
+      return {
+        accentColorId: id,
+        theme: {
+          ...state.theme,
+          colors: newColors
+        }
+      };
+    });
   },
 
   setTerminalTheme: (id: TerminalThemeId) => {
@@ -59,35 +133,43 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   },
 
   initTheme: async () => {
-    const savedThemeId = await (window as any).electron.storeGet('theme');
+    const savedBaseTheme = await (window as any).electron.storeGet('baseTheme') as BaseThemeId;
+    const savedAccentColor = await (window as any).electron.storeGet('accentColor') as AccentColorId;
     const savedTerminalThemeId = await (window as any).electron.storeGet('terminalTheme');
     const savedOpacity = await (window as any).electron.storeGet('opacity');
 
-    if (savedOpacity) {
-      set({ opacity: parseFloat(savedOpacity) });
-      const root = document.getElementById('root');
-      if (root) {
-        root.style.setProperty('--app-opacity', savedOpacity.toString());
-      }
+    // Default values
+    let baseTheme: BaseThemeId = 'dark';
+    let accentColor: AccentColorId = 'indigo';
+
+    // Legacy migration or load
+    if (savedBaseTheme && baseThemes[savedBaseTheme]) {
+      baseTheme = savedBaseTheme;
     } else {
-      const root = document.getElementById('root');
-      if (root) {
-        root.style.setProperty('--app-opacity', '0.9');
-      }
+      // Try to migrate boolean dark mode or old theme names if necessary
+      // For now, just default to dark/indigo which is close to Hoppscotch
     }
 
-    if (savedThemeId && themes[savedThemeId as ThemeId]) {
-      get().setTheme(savedThemeId as ThemeId);
-    } else {
-      // Default to zangqing
-      get().setTheme('zangqing');
+    if (savedAccentColor && accentColors[savedAccentColor]) {
+      accentColor = savedAccentColor;
     }
 
+    // Apply initial theme
+    get().setBaseTheme(baseTheme);
+    get().setAccentColor(accentColor);
+
+    // Terminal Theme
     if (savedTerminalThemeId && terminalThemes[savedTerminalThemeId as TerminalThemeId]) {
       get().setTerminalTheme(savedTerminalThemeId as TerminalThemeId);
     } else {
-      // Use zangqing terminal theme
-      get().setTerminalTheme('zangqing');
+      get().setTerminalTheme('default');
+    }
+
+    // Opacity
+    if (savedOpacity) {
+      get().setOpacity(parseFloat(savedOpacity));
+    } else {
+      get().setOpacity(0.9);
     }
   }
 }));

@@ -108,22 +108,7 @@ export function setupIpcHandlers() {
     return sshManager.dockerAction(id, containerId, action);
   });
 
-  // Tunnels
-  ipcMain.handle('tunnel-add', async (event, { id, type, config, name }) => {
-    return sshManager.addTunnel(id, type, config, name);
-  });
 
-  ipcMain.handle('tunnel-toggle', async (event, { id, tunnelId, active }) => {
-    return sshManager.toggleTunnel(id, tunnelId, active);
-  });
-
-  ipcMain.handle('tunnel-remove', async (event, { id, tunnelId }) => {
-    return sshManager.removeTunnel(id, tunnelId);
-  });
-
-  ipcMain.handle('tunnel-list', async (event, id) => {
-    return sshManager.getTunnels(id);
-  });
 
   // Window Controls
   ipcMain.on('window-minimize', (event) => {

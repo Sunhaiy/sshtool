@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'; // Modified: Added CardDescription
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import {
-  ArrowLeft, Check, Smartphone, Palette, Terminal, CreditCard, Keyboard, Monitor, Volume2, Type, Sparkles, Eye, EyeOff // Added AI icons
+  ArrowLeft, Check, Smartphone, Palette, Terminal, Sparkles, Eye, EyeOff
 } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useTranslation } from '../hooks/useTranslation'; // Kept original path
+import { useTranslation } from '../hooks/useTranslation';
 import { translations, Language } from '../shared/locales';
-import { themes, terminalThemes, ThemeId } from '../shared/themes';
+import { baseThemes, accentColors, terminalThemes, BaseThemeId, AccentColorId } from '../shared/themes';
 import { AI_PROVIDER_CONFIGS, AIProvider } from '../shared/aiTypes';
 import { cn } from '../lib/utils';
 
@@ -18,11 +18,20 @@ interface SettingsProps {
 
 type SettingsTab = 'app' | 'appearance' | 'terminal' | 'ai';
 
-export function Settings({ onBack }: SettingsProps) { // Kept original SettingsProps type
+export function Settings({ onBack }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
-  const { currentThemeId, setTheme, opacity, setOpacity, currentTerminalThemeId, setTerminalTheme } = useThemeStore(); // Modified: Added currentTerminalThemeId, setTerminalTheme
+  // New Theme Store API
+  const {
+    baseThemeId,
+    setBaseTheme,
+    accentColorId,
+    setAccentColor,
+    opacity,
+    setOpacity,
+    currentTerminalThemeId,
+    setTerminalTheme
+  } = useThemeStore();
 
-  // Fix: Destructure all settings at the top level to adhere to Rules of Hooks
   const {
     language, setLanguage,
     uiFontFamily, setUiFontFamily,
@@ -49,6 +58,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
   const { t } = useTranslation();
 
   const terminalFontOptions = [
+    { label: 'Inter', value: "'Inter', monospace" },
     { label: 'Monospace (Default)', value: 'monospace' },
     { label: 'Consolas', value: "'Consolas', monospace" },
     { label: 'Fira Code', value: "'Fira Code', monospace" },
@@ -69,10 +79,10 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
   ];
 
   const sidebarItems: { id: SettingsTab; icon: any; label: string }[] = [
-    { id: 'app', icon: Smartphone, label: '应用 (App)' },
-    { id: 'appearance', icon: Palette, label: '外观 (Appearance)' },
-    { id: 'terminal', icon: Terminal, label: '终端 (Terminal)' },
-    { id: 'ai', icon: Sparkles, label: 'AI 智能 (AI)' },
+    { id: 'app', icon: Smartphone, label: t('settings.tabs.app') },
+    { id: 'appearance', icon: Palette, label: t('settings.tabs.appearance') },
+    { id: 'terminal', icon: Terminal, label: t('settings.tabs.terminal') },
+    { id: 'ai', icon: Sparkles, label: t('settings.tabs.ai') },
   ];
 
   const renderContent = () => {
@@ -106,7 +116,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                     {t('settings.appearance.languageDesc')}
                   </span>
                   <select
-                    className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                    className="h-9 w-full sm:w-64 px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                     value={language}
                     onChange={(e) => setLanguage(e.target.value as Language)}
                   >
@@ -137,12 +147,9 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                 {/* Opacity */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex justify-between items-center w-full sm:w-64">
-                    <span className="font-medium text-sm">Window Opacity</span>
+                    <span className="font-medium text-sm">{t('settings.appearance.opacity')}</span>
                     <span className="text-xs text-muted-foreground">{Math.round(opacity * 100)}%</span>
                   </div>
-                  <span className="text-xs text-muted-foreground mb-2">
-                    Adjust the transparency of the window background.
-                  </span>
                   <input
                     type="range"
                     min="0.5"
@@ -154,61 +161,67 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                   />
                 </div>
 
-                {/* Theme */}
+                {/* Base Theme */}
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-medium text-sm">{t('settings.appearance.theme')}</span>
+                  <span className="font-medium text-sm">{t('settings.appearance.backgroundTheme')}</span>
                   <span className="text-xs text-muted-foreground mb-2">
-                    {t('settings.appearance.themeDesc')}
+                    {t('settings.appearance.backgroundThemeDesc')}
                   </span>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {(Object.keys(themes) as ThemeId[]).map((themeId) => {
-                      const theme = themes[themeId];
-                      return (
+                  <div className="grid grid-cols-3 gap-4">
+                    {Object.values(baseThemes).map((theme) => (
+                      <div
+                        key={theme.id}
+                        className={cn(
+                          "cursor-pointer rounded-lg border-2 p-1 hover:border-primary transition-all",
+                          baseThemeId === theme.id ? "border-primary" : "border-transparent"
+                        )}
+                        onClick={() => setBaseTheme(theme.id)}
+                      >
                         <div
-                          key={themeId}
-                          className={cn(
-                            "cursor-pointer rounded-lg border-2 p-1 hover:border-primary transition-all",
-                            currentThemeId === themeId ? "border-primary" : "border-transparent"
-                          )}
-                          onClick={() => setTheme(themeId)}
+                          className="aspect-[4/3] rounded-md border shadow-sm mb-2 overflow-hidden relative flex items-center justify-center"
+                          style={{
+                            background: `hsl(${theme.colors.background})`,
+                            color: `hsl(${theme.colors.foreground})`
+                          }}
                         >
-                          <div
-                            className="aspect-[4/3] rounded-md border shadow-sm mb-2 overflow-hidden relative"
-                            style={{
-                              background: `hsl(${theme.colors.background})`,
-                              color: `hsl(${theme.colors.foreground})`
-                            }}
-                          >
-                            {/* Mini UI Preview */}
-                            <div className="h-2 w-full absolute top-0 left-0 opacity-80" style={{ background: `hsl(${theme.colors.border})` }} />
-                            <div className="p-2 pt-4 flex flex-col gap-1">
-                              <div className="h-1.5 w-1/2 rounded-full opacity-60" style={{ background: `hsl(${theme.colors.foreground})` }} />
-                              <div className="h-1.5 w-3/4 rounded-full opacity-40" style={{ background: `hsl(${theme.colors.foreground})` }} />
-                              <div className="mt-1 h-4 w-full rounded border opacity-80 flex items-center justify-center" style={{ borderColor: `hsl(${theme.colors.border})`, background: `hsl(${theme.colors.card})` }}>
-                                <span className="text-[6px]">SSH</span>
-                              </div>
-                              <div className="mt-1 flex-1 rounded p-1 font-mono text-[5px] overflow-hidden leading-tight" style={{ background: theme.terminal.background, color: theme.terminal.foreground }}>
-                                $ echo hello<br />
-                                <span style={{ color: theme.terminal.green }}>world</span>
-                              </div>
+                          <span className="text-xs font-semibold">{theme.name}</span>
+                          {baseThemeId === theme.id && (
+                            <div className="absolute top-1 right-1 bg-primary text-primary-foreground rounded-full p-0.5">
+                              <Check className="w-3 h-3" />
                             </div>
-                            {currentThemeId === themeId && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/20 dark:bg-white/20">
-                                <div className="bg-primary text-primary-foreground rounded-full p-1">
-                                  <Check className="w-3 h-3" />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-center text-xs font-medium truncate px-1">
-                            {theme.name}
-                          </div>
+                          )}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                {/* Accent Color */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-medium text-sm">{t('settings.appearance.accentColor')}</span>
+                  <span className="text-xs text-muted-foreground mb-2">
+                    {t('settings.appearance.accentColorDesc')}
+                  </span>
+                  <div className="flex flex-wrap gap-3">
+                    {Object.values(accentColors).map((accent) => (
+                      <button
+                        key={accent.id}
+                        onClick={() => setAccentColor(accent.id)}
+                        className={cn(
+                          "w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center",
+                          accentColorId === accent.id ? "border-foreground" : "border-transparent hover:scale-110"
+                        )}
+                        style={{ background: `hsl(${accent.color})` }}
+                        title={accent.name}
+                      >
+                        {accentColorId === accent.id && (
+                          <Check className="w-4 h-4 text-white drop-shadow-md" strokeWidth={3} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </CardContent>
           </Card>
@@ -225,15 +238,15 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
 
                 {/* Terminal Theme */}
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-medium text-sm">Terminal Theme</span>
+                  <span className="font-medium text-sm">{t('settings.appearance.theme')}</span>
                   <span className="text-xs text-muted-foreground mb-2">
-                    Select a color scheme for the terminal.
+                    {t('settings.appearance.themeDesc')}
                   </span>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {Object.entries(terminalThemes).map(([id, theme]) => (
                       <button
                         key={id}
-                        onClick={() => setTerminalTheme(id as any)} // Cast just in case
+                        onClick={() => setTerminalTheme(id as any)}
                         className={`
                           flex flex-col gap-2 p-2 rounded-md border text-left transition-all h-full
                           ${currentTerminalThemeId === id
@@ -257,11 +270,8 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                 {/* Font */}
                 <div className="flex flex-col gap-1.5">
                   <span className="font-medium text-sm">{t('settings.terminal.fontFamily')}</span>
-                  <span className="text-xs text-muted-foreground mb-2">
-                    {t('settings.terminal.fontFamilyDesc')}
-                  </span>
                   <select
-                    className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                    className="h-9 w-full sm:w-64 px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                     value={terminalFontFamily}
                     onChange={(e) => setTerminalFontFamily(e.target.value)}
                   >
@@ -279,7 +289,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                       type="number"
                       min="10"
                       max="24"
-                      className="w-full p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={fontSize}
                       onChange={(e) => setFontSize(parseInt(e.target.value))}
                     />
@@ -291,7 +301,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                       min="1.0"
                       max="2.0"
                       step="0.1"
-                      className="w-full p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={lineHeight}
                       onChange={(e) => setLineHeight(parseFloat(e.target.value))}
                     />
@@ -303,7 +313,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                       min="-5"
                       max="5"
                       step="0.5"
-                      className="w-full p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={letterSpacing}
                       onChange={(e) => setLetterSpacing(parseFloat(e.target.value))}
                     />
@@ -315,7 +325,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                   <div className="flex flex-col gap-1.5 flex-1">
                     <span className="font-medium text-sm">{t('settings.terminal.cursorStyle')}</span>
                     <select
-                      className="w-full p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={cursorStyle}
                       onChange={(e) => setCursorStyle(e.target.value as any)}
                     >
@@ -347,11 +357,8 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                     <div className="flex flex-col sm:flex-row gap-4">
                       <div className="flex flex-col gap-1.5 flex-1">
                         <span className="font-medium text-sm">{t('settings.terminal.rendererType')}</span>
-                        <span className="text-xs text-muted-foreground mb-1">
-                          {t('settings.terminal.rendererTypeDesc')}
-                        </span>
                         <select
-                          className="w-full p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                          className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                           value={rendererType}
                           onChange={(e) => setRendererType(e.target.value as any)}
                         >
@@ -361,15 +368,12 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                       </div>
                       <div className="flex flex-col gap-1.5 flex-1">
                         <span className="font-medium text-sm">{t('settings.terminal.scrollback')}</span>
-                        <span className="text-xs text-muted-foreground mb-1">
-                          {t('settings.terminal.scrollbackDesc')}
-                        </span>
                         <input
                           type="number"
                           min="1000"
                           max="100000"
                           step="1000"
-                          className="w-full p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                          className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                           value={scrollback}
                           onChange={(e) => setScrollback(parseInt(e.target.value))}
                         />
@@ -391,9 +395,6 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                           </label>
                         </div>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {t('settings.terminal.brightBoldDesc')}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -424,34 +425,6 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                   </div>
                 </div>
 
-                {/* Terminal Theme Selector */}
-                <div className="pt-4 border-t border-border">
-                  <h3 className="text-base font-semibold mb-4">{t('settings.terminal.theme')}</h3>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-medium text-sm">Theme</span>
-                    <span className="text-xs text-muted-foreground mb-2">
-                      Select the terminal color theme.
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.values(themes).map((tValue) => (
-                        <button
-                          key={tValue.id}
-                          onClick={() => setTheme(tValue.id)}
-                          className={`
-                            flex items-center gap-2 p-2 rounded-md border text-left transition-all
-                            ${currentThemeId === tValue.id
-                              ? 'border-primary bg-primary/10 ring-1 ring-primary'
-                              : 'border-input hover:bg-accent hover:text-accent-foreground'
-                            }
-                          `}
-                        >
-                          <div className="w-4 h-4 rounded-full border border-border" style={{ background: tValue.colors.background }}></div>
-                          <span className="text-sm">{tValue.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -463,10 +436,10 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5" />
-                AI 智能助手
+                {t('settings.ai.title')}
               </CardTitle>
               <CardDescription>
-                配置 AI 服务以启用自然语言转指令、智能报错分析等功能
+                {t('settings.ai.desc')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -474,9 +447,9 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                 {/* AI Enable Toggle */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
                   <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-sm">启用 AI 功能</span>
+                    <span className="font-medium text-sm">{t('settings.ai.enable')}</span>
                     <span className="text-xs text-muted-foreground">
-                      开启后在终端下方显示 AI 对话框
+                      {t('settings.ai.enableDesc')}
                     </span>
                   </div>
                   <button
@@ -497,12 +470,12 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                 {aiEnabled && (
                   <>
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">AI 服务提供商</span>
+                      <span className="font-medium text-sm">{t('settings.ai.provider')}</span>
                       <span className="text-xs text-muted-foreground mb-2">
-                        选择你的 AI API 提供商
+                        {t('settings.ai.providerDesc')}
                       </span>
                       <select
-                        className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                        className="h-9 w-full sm:w-64 px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                         value={aiProvider}
                         onChange={(e) => setAiProvider(e.target.value as AIProvider)}
                       >
@@ -514,9 +487,9 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
 
                     {/* API Key */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">API Key</span>
+                      <span className="font-medium text-sm">{t('settings.ai.apiKey')}</span>
                       <span className="text-xs text-muted-foreground mb-2">
-                        填入你的 API 密钥 (将安全存储在本地)
+                        {t('settings.ai.apiKeyDesc')}
                       </span>
                       <div className="relative">
                         <input
@@ -529,7 +502,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                       </div>
                       {aiApiKey && (
                         <span className="text-xs text-green-500 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> API Key 已配置
+                          <Check className="w-3 h-3" /> API Key Configured
                         </span>
                       )}
                     </div>
@@ -537,9 +510,9 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                     {/* Custom Base URL (for custom providers) */}
                     {aiProvider === 'custom' && (
                       <div className="flex flex-col gap-1.5">
-                        <span className="font-medium text-sm">自定义 Base URL</span>
+                        <span className="font-medium text-sm">{t('settings.ai.baseUrl')}</span>
                         <span className="text-xs text-muted-foreground mb-2">
-                          输入你的 API 端点地址
+                          {t('settings.ai.baseUrlDesc')}
                         </span>
                         <input
                           type="text"
@@ -553,9 +526,9 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
 
                     {/* Model Override */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">模型 (可选)</span>
+                      <span className="font-medium text-sm">{t('settings.ai.model')}</span>
                       <span className="text-xs text-muted-foreground mb-2">
-                        留空使用默认模型: {AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
+                        {t('settings.ai.modelDesc')} {AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
                       </span>
                       <input
                         type="text"
@@ -568,9 +541,9 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
 
                     {/* Privacy Mode Toggle */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">隐私模式</span>
+                      <span className="font-medium text-sm">{t('settings.ai.privacy')}</span>
                       <span className="text-xs text-muted-foreground mb-2">
-                        开启后将自动脱敏 IP、密码等敏感信息
+                        {t('settings.ai.privacyDesc')}
                       </span>
                       <button
                         onClick={() => setAiPrivacyMode(!aiPrivacyMode)}
@@ -582,15 +555,15 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
                         )}
                       >
                         {aiPrivacyMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                        {aiPrivacyMode ? '已开启' : '已关闭'}
+                        {aiPrivacyMode ? 'On' : 'Off'}
                       </button>
                     </div>
 
                     {/* Send Shortcut */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">发送快捷键</span>
+                      <span className="font-medium text-sm">{t('settings.ai.shortcut')}</span>
                       <span className="text-xs text-muted-foreground mb-2">
-                        选择生成指令时使用的快捷键方式
+                        {t('settings.ai.shortcutDesc')}
                       </span>
                       <div className="flex bg-background/50 rounded-md border border-input p-1 w-fit">
                         {[
@@ -627,7 +600,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
   return (
     <div className="flex h-full bg-background overflow-hidden animate-in fade-in duration-300">
       {/* Sidebar */}
-      <div className="w-64 border-r bg-background/50 flex flex-col h-full">
+      <div className="w-64 border-r bg-card flex flex-col h-full">
         <div className="p-4 border-b flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
             <ArrowLeft className="w-4 h-4" />
@@ -635,7 +608,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
           <span className="font-semibold text-lg">{t('settings.title')}</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {sidebarItems.map((item) => (
             <button
               key={item.id}
@@ -656,14 +629,14 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
 
       {/* Content Area */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 duration-300">
             <div className="mb-6">
               <h2 className="text-2xl font-bold tracking-tight">
                 {sidebarItems.find(i => i.id === activeTab)?.label}
               </h2>
               <p className="text-muted-foreground mt-1">
-                Manage your {sidebarItems.find(i => i.id === activeTab)?.label.split(' ')[0]} settings
+                Manage your settings
               </p>
             </div>
             {renderContent()}

@@ -16,7 +16,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
     const [content, setContent] = useState(initialContent);
     const [isSaving, setIsSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
-    const { currentThemeId } = useThemeStore();
+    const { baseThemeId } = useThemeStore();
 
     const handleEditorChange = (value: string | undefined) => {
         if (value !== undefined) {
@@ -106,7 +106,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
                     height="100%"
                     defaultLanguage={getLanguage(fileName)}
                     defaultValue={initialContent}
-                    theme={currentThemeId === 'githubLight' ? 'light' : 'vs-dark'} // Simple mapping
+                    theme={baseThemeId === 'light' ? 'light' : 'vs-dark'} // Simple mapping
                     value={content}
                     onChange={handleEditorChange}
                     options={{
