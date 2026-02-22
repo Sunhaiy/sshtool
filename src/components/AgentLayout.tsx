@@ -1,16 +1,17 @@
 // AgentLayout - Two-panel layout for Agent mode
+// Uses TerminalSlotConsumer to display the shared terminal instance
 import { useRef, useState, useEffect } from 'react';
 import { AIChatPanel, AgentMessage } from './AIChatPanel';
 import { ErrorBoundary } from './ErrorBoundary';
+import { TerminalSlotConsumer } from './TerminalSlot';
 
 interface AgentLayoutProps {
     connectionId: string;
     messages: AgentMessage[];
     onMessagesChange: (messages: AgentMessage[]) => void;
-    terminalContent: React.ReactNode;
 }
 
-export function AgentLayout({ connectionId, messages, onMessagesChange, terminalContent }: AgentLayoutProps) {
+export function AgentLayout({ connectionId, messages, onMessagesChange }: AgentLayoutProps) {
     const [chatWidth, setChatWidth] = useState(0.55); // 55% for chat
     const layoutRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef(false);
@@ -78,7 +79,7 @@ export function AgentLayout({ connectionId, messages, onMessagesChange, terminal
                 onMouseDown={startResize}
             />
 
-            {/* Right: Terminal Observation (passed from parent) */}
+            {/* Right: Terminal Observation - uses TerminalSlotConsumer to host the shared terminal */}
             <div
                 className="h-full flex flex-col min-w-0 overflow-hidden"
                 style={{ width: `${(1 - chatWidth) * 100}%` }}
@@ -89,9 +90,9 @@ export function AgentLayout({ connectionId, messages, onMessagesChange, terminal
                         <div className="w-2 h-2 rounded-full bg-green-500 mr-2" />
                         终端观察
                     </div>
-                    {/* Terminal - passed in from parent to share instance */}
+                    {/* Terminal Slot Consumer - placeholder that receives the shared terminal DOM node */}
                     <div className="flex-1 min-h-0 relative overflow-hidden">
-                        {terminalContent}
+                        <TerminalSlotConsumer />
                     </div>
                 </div>
             </div>
