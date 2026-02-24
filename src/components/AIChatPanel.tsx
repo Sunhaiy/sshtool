@@ -34,6 +34,42 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const { aiSendShortcut } = useSettingsStore();
 
+    // Rolling buffer of recent terminal output (last 100 lines), stripped of ANSI codes
+    const terminalBufferRef = useRef<string[]>([]);
+
+    // Subscribe to terminal data for this connection and maintain the buffer
+    useEffect(() => {
+        const eWindow = window as any;
+        if (!eWindow.electron?.onTerminalData) return;
+
+        const stripAnsi = (str: string) =>
+            // Remove ANSI escape sequences (colors, cursor movements, etc.)
+            str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+        const cleanup = eWindow.electron.onTerminalData(
+            (_: any, { id, data }: { id: string; data: string }) => {
+                if (id !== connectionId) return;
+                const clean = stripAnsi(data);
+                // Split incoming data into lines and add to buffer
+                const incoming = clean.split(/\r?\n/);
+                terminalBufferRef.current = [
+                    ...terminalBufferRef.current,
+                    ...incoming,
+                ].filter(l => l.trim()).slice(-100); // keep last 100 non-empty lines
+            }
+        );
+        return cleanup;
+    }, [connectionId]);
+
+    /** Get recent terminal output as a context string for the AI */
+    const getTerminalContext = () => {
+        const lines = terminalBufferRef.current;
+        if (lines.length === 0) return '';
+        // Send last 80 lines to avoid huge token usage
+        const recent = lines.slice(-80).join('\n');
+        return `\n\n---\n[当前终端最近输出]\n\`\`\`\n${recent}\n\`\`\`\n请根据以上终端输出来了解服务器当前状态并回答用户的问题。`;
+    };
+
     // Auto-scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,8 +135,9 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
         try {
             // Build messages for AI
             const systemPrompt = (await import('../shared/aiTypes')).AI_SYSTEM_PROMPTS.agent;
+            const terminalContext = getTerminalContext();
             const chatMessages = [
-                { role: 'system' as const, content: systemPrompt },
+                { role: 'system' as const, content: systemPrompt + terminalContext },
                 ...updatedMessages.map(m => ({
                     role: m.role === 'tool' ? 'assistant' as const : m.role as 'user' | 'assistant',
                     content: m.content,

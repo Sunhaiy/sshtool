@@ -58,13 +58,19 @@ export function TerminalSlotConsumer() {
         const parent = mountRef.current;
         parent.appendChild(stableContainer);
 
-        // Trigger a resize so xterm fits into its new container
-        const timeout = setTimeout(() => {
+        // Two-frame resize: first RAF lets the browser compute new layout,
+        // second RAF ensures xterm's renderer completes its redraw pass.
+        let raf1: number, raf2: number;
+        raf1 = requestAnimationFrame(() => {
             window.dispatchEvent(new Event('resize'));
-        }, 50);
+            raf2 = requestAnimationFrame(() => {
+                window.dispatchEvent(new Event('resize'));
+            });
+        });
 
         return () => {
-            clearTimeout(timeout);
+            cancelAnimationFrame(raf1);
+            cancelAnimationFrame(raf2!);
             try {
                 if (stableContainer.parentElement === parent) {
                     parent.removeChild(stableContainer);

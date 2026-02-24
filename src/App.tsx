@@ -153,101 +153,105 @@ function App() {
           </div>
         )}
 
-        {page === 'workspace' && (
-          <>
-            <SessionTabs
-              sessions={sessions}
-              activeId={activeSessionId}
-              onSwitch={setActiveSessionId}
-              onClose={handleCloseSession}
-              onNew={() => setPage('connections')}
-              onCloseAll={handleCloseAllSessions}
-            />
+        {/* Workspace — always mounted so terminal state is preserved.
+            Settings and Connections pages are absolute overlays at z-50,
+            so they appear on top without unmounting the workspace below. */}
+        <div
+          className="flex-1 relative overflow-hidden flex flex-col"
+          style={{ visibility: sessions.length > 0 ? 'visible' : 'hidden' }}
+        >
+          <SessionTabs
+            sessions={sessions}
+            activeId={activeSessionId}
+            onSwitch={setActiveSessionId}
+            onClose={handleCloseSession}
+            onNew={() => setPage('connections')}
+            onCloseAll={handleCloseAllSessions}
+          />
 
-            <div className="flex-1 relative overflow-hidden">
-              {/* Render ALL sessions to preserve state, but hide inactive ones */}
-              {sessions.map(session => (
-                <div
-                  key={session.uniqueId}
-                  className="absolute inset-0"
-                  style={{
-                    visibility: session.uniqueId === activeSessionId ? 'visible' : 'hidden',
-                    zIndex: session.uniqueId === activeSessionId ? 10 : 0,
-                    background: 'hsl(var(--background))'
-                  }}
-                >
-                  {/* TerminalSlotProvider wraps both layouts so the single TerminalView
+          <div className="flex-1 relative overflow-hidden">
+            {/* Render ALL sessions to preserve state, but hide inactive ones */}
+            {sessions.map(session => (
+              <div
+                key={session.uniqueId}
+                className="absolute inset-0"
+                style={{
+                  visibility: session.uniqueId === activeSessionId ? 'visible' : 'hidden',
+                  zIndex: session.uniqueId === activeSessionId ? 10 : 0,
+                  background: 'hsl(var(--background))'
+                }}
+              >
+                {/* TerminalSlotProvider wraps both layouts so the single TerminalView
                       instance can be physically moved (via DOM appendChild) to whichever
                       layout is currently active, without ever re-mounting it. */}
-                  <TerminalSlotProvider
-                    connectionId={session.uniqueId}
-                    isVisible={session.uniqueId === activeSessionId}
+                <TerminalSlotProvider
+                  connectionId={session.uniqueId}
+                  isVisible={session.uniqueId === activeSessionId}
+                >
+                  {/* Normal Mode Layout */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      visibility: workspaceMode === 'normal' ? 'visible' : 'hidden',
+                      zIndex: workspaceMode === 'normal' ? 10 : 0
+                    }}
                   >
-                    {/* Normal Mode Layout */}
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        visibility: workspaceMode === 'normal' ? 'visible' : 'hidden',
-                        zIndex: workspaceMode === 'normal' ? 10 : 0
-                      }}
-                    >
-                      <ResizableLayout
-                        leftContent={
-                          <div className="h-full flex flex-col bg-card/50 rounded-lg border border-border overflow-hidden">
-                            <ErrorBoundary name="FileBrowser">
-                              <FileBrowser connectionId={session.uniqueId} />
-                            </ErrorBoundary>
+                    <ResizableLayout
+                      leftContent={
+                        <div className="h-full flex flex-col bg-card/50 rounded-lg border border-border overflow-hidden">
+                          <ErrorBoundary name="FileBrowser">
+                            <FileBrowser connectionId={session.uniqueId} />
+                          </ErrorBoundary>
+                        </div>
+                      }
+                      middleContent={
+                        <div className="h-full bg-card/50 rounded-lg border border-border flex flex-col overflow-hidden">
+                          <div className="flex-1 min-h-0 relative overflow-hidden">
+                            {/* TerminalSlotConsumer: placeholder that adopts the stable terminal div */}
+                            {workspaceMode === 'normal' && <TerminalSlotConsumer />}
                           </div>
-                        }
-                        middleContent={
-                          <div className="h-full bg-card/50 rounded-lg border border-border flex flex-col overflow-hidden">
-                            <div className="flex-1 min-h-0 relative overflow-hidden">
-                              {/* TerminalSlotConsumer: placeholder that adopts the stable terminal div */}
-                              {workspaceMode === 'normal' && <TerminalSlotConsumer />}
+                          {aiEnabled && (
+                            <div className="flex-shrink-0 border-t border-border p-1.5 bg-transparent">
+                              <AICommandInput
+                                onCommandGenerated={(cmd) => {
+                                  const eWindow = window as any;
+                                  eWindow.electron?.writeTerminal(session.uniqueId, cmd);
+                                }}
+                              />
                             </div>
-                            {aiEnabled && (
-                              <div className="flex-shrink-0 border-t border-border p-1.5 bg-transparent">
-                                <AICommandInput
-                                  onCommandGenerated={(cmd) => {
-                                    const eWindow = window as any;
-                                    eWindow.electron?.writeTerminal(session.uniqueId, cmd);
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        }
-                        rightContent={
-                          <div className="h-full bg-card/50 rounded-lg border border-border overflow-hidden">
-                            <ErrorBoundary name="RightPanel">
-                              <RightPanel connectionId={session.uniqueId} />
-                            </ErrorBoundary>
-                          </div>
-                        }
-                      />
-                    </div>
+                          )}
+                        </div>
+                      }
+                      rightContent={
+                        <div className="h-full bg-card/50 rounded-lg border border-border overflow-hidden">
+                          <ErrorBoundary name="RightPanel">
+                            <RightPanel connectionId={session.uniqueId} />
+                          </ErrorBoundary>
+                        </div>
+                      }
+                    />
+                  </div>
 
-                    {/* Agent Mode Layout */}
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        visibility: workspaceMode === 'agent' ? 'visible' : 'hidden',
-                        zIndex: workspaceMode === 'agent' ? 10 : 0
-                      }}
-                    >
-                      <AgentLayout
-                        connectionId={session.uniqueId}
-                        messages={getAgentMessages(session.uniqueId)}
-                        onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
-                        isActive={workspaceMode === 'agent'}
-                      />
-                    </div>
-                  </TerminalSlotProvider>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+                  {/* Agent Mode Layout */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      visibility: workspaceMode === 'agent' ? 'visible' : 'hidden',
+                      zIndex: workspaceMode === 'agent' ? 10 : 0
+                    }}
+                  >
+                    <AgentLayout
+                      connectionId={session.uniqueId}
+                      messages={getAgentMessages(session.uniqueId)}
+                      onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
+                      isActive={workspaceMode === 'agent'}
+                    />
+                  </div>
+                </TerminalSlotProvider>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

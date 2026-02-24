@@ -14,22 +14,7 @@ interface TerminalViewProps {
 export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const { terminalTheme } = useThemeStore();
-  const {
-    terminalFontFamily,
-    fontSize,
-    lineHeight,
-    letterSpacing,
-    cursorStyle,
-    cursorBlink,
-    aiEnabled
-  } = useSettingsStore();
-  const {
-    rendererType,
-    scrollback,
-    brightBold,
-    bellStyle
-  } = useSettingsStore();
+  const { aiEnabled, rendererType } = useSettingsStore();
 
   // Context Menu State
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -99,6 +84,28 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       }
       term.focus();
 
+      // --- Live theme/settings subscription (registered HERE because initTerminal
+      // is async, so term doesn't exist yet when useEffect callbacks run) ---
+      const applySettings = () => {
+        const t = useThemeStore.getState().terminalTheme;
+        if (t) term.options.theme = { ...t, background: 'transparent' };
+        const s = useSettingsStore.getState();
+        term.options.fontFamily = s.terminalFontFamily;
+        term.options.fontSize = s.fontSize;
+        term.options.lineHeight = s.lineHeight;
+        term.options.letterSpacing = s.letterSpacing;
+        term.options.cursorStyle = s.cursorStyle;
+        term.options.cursorBlink = s.cursorBlink;
+        term.options.scrollback = s.scrollback;
+        term.options.drawBoldTextInBrightColors = s.brightBold;
+        // @ts-ignore
+        term.options.bellStyle = s.bellStyle;
+        try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
+        try { fitAddon.fit(); } catch (_) { }
+      };
+      const unsubTheme = useThemeStore.subscribe(applySettings);
+      const unsubSettings = useSettingsStore.subscribe(applySettings);
+
       term.onData(data => {
         (window as any).electron.writeTerminal(connectionId, data);
       });
@@ -140,6 +147,8 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       resizeObserver.observe(containerRef.current!);
 
       return () => {
+        unsubTheme();
+        unsubSettings();
         window.removeEventListener('contextmenu', handleNativeContextMenu, true);
         try {
           cleanup();
@@ -174,34 +183,8 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     };
   }, [connectionId, rendererType]);
 
-  // Effect to handle dynamic updates (font, theme, etc.)
-  useEffect(() => {
-    if (!termRef.current) return;
-
-    // Theme
-    if (terminalTheme) {
-      termRef.current.options.theme = {
-        ...terminalTheme,
-        background: 'transparent'
-      };
-    }
-
-    // Settings
-    termRef.current.options.fontFamily = terminalFontFamily;
-    termRef.current.options.fontSize = fontSize;
-    termRef.current.options.lineHeight = lineHeight;
-    termRef.current.options.letterSpacing = letterSpacing;
-    termRef.current.options.cursorStyle = cursorStyle;
-    termRef.current.options.cursorBlink = cursorBlink;
-    termRef.current.options.scrollback = scrollback;
-    termRef.current.options.drawBoldTextInBrightColors = brightBold;
-    // @ts-ignore
-    termRef.current.options.bellStyle = bellStyle;
-
-    // Trigger fit
-    // @ts-ignore
-    try { termRef.current?._addonManager?.addons?.forEach(addon => { if (addon.constructor.name === 'FitAddon') addon.fit(); }); } catch (e) { }
-  }, [terminalTheme, terminalFontFamily, fontSize, lineHeight, letterSpacing, cursorStyle, cursorBlink, scrollback, brightBold, bellStyle]);
+  // Theme/settings live updates are handled by store.subscribe() inside
+  // initTerminal() above, not here. This ensures `term` is always valid.
 
   const handleCopy = () => {
     console.log('handleCopy called, selection:', selectionText);

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Select } from '../components/ui/select';
+import { Input } from '../components/ui/input';
 import {
   ArrowLeft, Check, Smartphone, Palette, Terminal, Sparkles, Eye, EyeOff
 } from 'lucide-react';
@@ -115,16 +117,17 @@ export function Settings({ onBack }: SettingsProps) {
                   <span className="text-xs text-muted-foreground mb-2">
                     {t('settings.appearance.languageDesc')}
                   </span>
-                  <select
-                    className="h-9 w-full sm:w-64 px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                  <Select
+                    className="w-full sm:w-64"
                     value={language}
-                    onChange={(e) => setLanguage(e.target.value as Language)}
-                  >
-                    <option value="en">English</option>
-                    <option value="zh">中文</option>
-                    <option value="ja">日本語</option>
-                    <option value="ko">한국어</option>
-                  </select>
+                    onChange={(v) => setLanguage(v as Language)}
+                    options={[
+                      { label: 'English', value: 'en' },
+                      { label: '中文', value: 'zh' },
+                      { label: '日本語', value: 'ja' },
+                      { label: '한국어', value: 'ko' },
+                    ]}
+                  />
                 </div>
 
                 {/* UI Font */}
@@ -133,15 +136,12 @@ export function Settings({ onBack }: SettingsProps) {
                   <span className="text-xs text-muted-foreground mb-2">
                     {t('settings.appearance.fontDesc')}
                   </span>
-                  <select
-                    className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                  <Select
+                    className="w-full sm:w-64"
                     value={uiFontFamily}
-                    onChange={(e) => setUiFontFamily(e.target.value)}
-                  >
-                    {uiFontOptions.map(font => (
-                      <option key={font.value} value={font.value}>{font.label}</option>
-                    ))}
-                  </select>
+                    onChange={setUiFontFamily}
+                    options={uiFontOptions}
+                  />
                 </div>
 
                 {/* Opacity */}
@@ -150,14 +150,14 @@ export function Settings({ onBack }: SettingsProps) {
                     <span className="font-medium text-sm">{t('settings.appearance.opacity')}</span>
                     <span className="text-xs text-muted-foreground">{Math.round(opacity * 100)}%</span>
                   </div>
-                  <input
+                  <Input
                     type="range"
                     min="0.5"
                     max="1.0"
                     step="0.01"
                     value={opacity}
                     onChange={(e) => setOpacity(parseFloat(e.target.value))}
-                    className="w-full sm:w-64 accent-primary cursor-pointer"
+                    className="w-full sm:w-64 accent-primary cursor-pointer h-auto border-none bg-transparent hover:bg-transparent p-0"
                   />
                 </div>
 
@@ -270,50 +270,44 @@ export function Settings({ onBack }: SettingsProps) {
                 {/* Font */}
                 <div className="flex flex-col gap-1.5">
                   <span className="font-medium text-sm">{t('settings.terminal.fontFamily')}</span>
-                  <select
-                    className="h-9 w-full sm:w-64 px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                  <Select
+                    className="w-full sm:w-64"
                     value={terminalFontFamily}
-                    onChange={(e) => setTerminalFontFamily(e.target.value)}
-                  >
-                    {terminalFontOptions.map(font => (
-                      <option key={font.value} value={font.value}>{font.label}</option>
-                    ))}
-                  </select>
+                    onChange={setTerminalFontFamily}
+                    options={terminalFontOptions}
+                  />
                 </div>
 
                 {/* Font Size & Line Height Row */}
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex flex-col gap-1.5 flex-1">
                     <span className="font-medium text-sm">{t('settings.terminal.fontSize')}</span>
-                    <input
+                    <Input
                       type="number"
                       min="10"
                       max="24"
-                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={fontSize}
                       onChange={(e) => setFontSize(parseInt(e.target.value))}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 flex-1">
                     <span className="font-medium text-sm">{t('settings.terminal.lineHeight')}</span>
-                    <input
+                    <Input
                       type="number"
                       min="1.0"
                       max="2.0"
                       step="0.1"
-                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={lineHeight}
                       onChange={(e) => setLineHeight(parseFloat(e.target.value))}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 flex-1">
                     <span className="font-medium text-sm">{t('settings.terminal.letterSpacing')}</span>
-                    <input
+                    <Input
                       type="number"
                       min="-5"
                       max="5"
                       step="0.5"
-                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                       value={letterSpacing}
                       onChange={(e) => setLetterSpacing(parseFloat(e.target.value))}
                     />
@@ -324,15 +318,15 @@ export function Settings({ onBack }: SettingsProps) {
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex flex-col gap-1.5 flex-1">
                     <span className="font-medium text-sm">{t('settings.terminal.cursorStyle')}</span>
-                    <select
-                      className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                    <Select
                       value={cursorStyle}
-                      onChange={(e) => setCursorStyle(e.target.value as any)}
-                    >
-                      <option value="block">Block ( █ )</option>
-                      <option value="underline">Underline ( _ )</option>
-                      <option value="bar">Bar ( | )</option>
-                    </select>
+                      onChange={(v) => setCursorStyle(v as any)}
+                      options={[
+                        { label: 'Block ( █ )', value: 'block' },
+                        { label: 'Underline ( _ )', value: 'underline' },
+                        { label: 'Bar ( | )', value: 'bar' },
+                      ]}
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5 flex-1">
                     <span className="font-medium text-sm">{t('settings.terminal.cursorBlink')}</span>
@@ -357,23 +351,22 @@ export function Settings({ onBack }: SettingsProps) {
                     <div className="flex flex-col sm:flex-row gap-4">
                       <div className="flex flex-col gap-1.5 flex-1">
                         <span className="font-medium text-sm">{t('settings.terminal.rendererType')}</span>
-                        <select
-                          className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                        <Select
                           value={rendererType}
-                          onChange={(e) => setRendererType(e.target.value as any)}
-                        >
-                          <option value="canvas">Canvas (Standard)</option>
-                          <option value="webgl">WebGL (High Performance)</option>
-                        </select>
+                          onChange={(v) => setRendererType(v as any)}
+                          options={[
+                            { label: 'Canvas (Standard)', value: 'canvas' },
+                            { label: 'WebGL (High Performance)', value: 'webgl' },
+                          ]}
+                        />
                       </div>
                       <div className="flex flex-col gap-1.5 flex-1">
                         <span className="font-medium text-sm">{t('settings.terminal.scrollback')}</span>
-                        <input
+                        <Input
                           type="number"
                           min="1000"
                           max="100000"
                           step="1000"
-                          className="h-9 w-full px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
                           value={scrollback}
                           onChange={(e) => setScrollback(parseInt(e.target.value))}
                         />
@@ -474,15 +467,14 @@ export function Settings({ onBack }: SettingsProps) {
                       <span className="text-xs text-muted-foreground mb-2">
                         {t('settings.ai.providerDesc')}
                       </span>
-                      <select
-                        className="h-9 w-full sm:w-64 px-3 py-1 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                      <Select
+                        className="w-full sm:w-64"
                         value={aiProvider}
-                        onChange={(e) => setAiProvider(e.target.value as AIProvider)}
-                      >
-                        {Object.entries(AI_PROVIDER_CONFIGS).map(([key, config]) => (
-                          <option key={key} value={key}>{config.displayName}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => setAiProvider(v as AIProvider)}
+                        options={Object.entries(AI_PROVIDER_CONFIGS).map(([key, config]) => ({
+                          label: config.displayName, value: key
+                        }))}
+                      />
                     </div>
 
                     {/* API Key */}
@@ -492,9 +484,9 @@ export function Settings({ onBack }: SettingsProps) {
                         {t('settings.ai.apiKeyDesc')}
                       </span>
                       <div className="relative">
-                        <input
+                        <Input
                           type="password"
-                          className="w-full sm:w-96 p-2 pr-10 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm font-mono"
+                          className="w-full sm:w-96 font-mono"
                           placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
                           value={aiApiKey}
                           onChange={(e) => setAiApiKey(e.target.value)}
@@ -514,9 +506,9 @@ export function Settings({ onBack }: SettingsProps) {
                         <span className="text-xs text-muted-foreground mb-2">
                           {t('settings.ai.baseUrlDesc')}
                         </span>
-                        <input
+                        <Input
                           type="text"
-                          className="w-full sm:w-96 p-2 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm font-mono"
+                          className="w-full sm:w-96 font-mono"
                           placeholder="https://api.example.com"
                           value={aiBaseUrl}
                           onChange={(e) => setAiBaseUrl(e.target.value)}
@@ -530,9 +522,9 @@ export function Settings({ onBack }: SettingsProps) {
                       <span className="text-xs text-muted-foreground mb-2">
                         {t('settings.ai.modelDesc')} {AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
                       </span>
-                      <input
+                      <Input
                         type="text"
-                        className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm"
+                        className="w-full sm:w-64"
                         placeholder={AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
                         value={aiModel}
                         onChange={(e) => setAiModel(e.target.value)}

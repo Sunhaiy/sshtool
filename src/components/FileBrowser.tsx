@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { FileEditor } from './FileEditor';
 import { cn } from '../lib/utils';
+import { Input } from './ui/input';
 import { format } from 'date-fns';
 import { useSettingsStore } from '../store/settingsStore';
 
@@ -736,9 +737,9 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
           <div className="bg-card border border-border p-6 rounded-lg shadow-xl w-80 animate-in zoom-in-95 scale-100">
             <h3 className="text-sm font-semibold mb-2">{inputDialog.title}</h3>
             <p className="text-xs text-muted-foreground mb-4">{inputDialog.message}</p>
-            <input
+            <Input
               autoFocus
-              className="w-full bg-secondary border border-border rounded px-3 py-2 text-xs mb-4 outline-none focus:ring-1 focus:ring-primary"
+              className="text-xs mb-4"
               defaultValue={inputDialog.defaultValue}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
