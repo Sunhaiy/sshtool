@@ -27,6 +27,8 @@ interface SettingsState {
     aiModel: string;
     aiPrivacyMode: boolean;
     aiSendShortcut: 'enter' | 'ctrlEnter';
+    agentControlMode: 'auto' | 'approval' | 'whitelist';
+    agentWhitelist: string[];
 
     setLanguage: (lang: Language) => void;
     setUiFontFamily: (font: string) => void;
@@ -51,6 +53,8 @@ interface SettingsState {
     setAiModel: (model: string) => void;
     setAiPrivacyMode: (enabled: boolean) => void;
     setAiSendShortcut: (shortcut: 'enter' | 'ctrlEnter') => void;
+    setAgentControlMode: (mode: 'auto' | 'approval' | 'whitelist') => void;
+    setAgentWhitelist: (list: string[]) => void;
 
     // Bookmarks
     bookmarks: string[];
@@ -83,6 +87,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     aiModel: '',
     aiPrivacyMode: false,
     aiSendShortcut: 'ctrlEnter',
+    agentControlMode: 'auto',
+    agentWhitelist: ['ls', 'pwd', 'whoami', 'cat', 'head', 'tail', 'df', 'free', 'uptime', 'uname', 'date', 'top', 'htop', 'ps', 'netstat', 'ss', 'ip', 'ifconfig', 'ping', 'traceroute', 'dig', 'nslookup', 'curl', 'wget', 'du', 'find', 'grep', 'wc', 'echo', 'which'],
 
     setLanguage: (lang: Language) => {
         set({ language: lang });
@@ -205,6 +211,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         window.electron.storeSet('aiSendShortcut', shortcut);
     },
 
+    setAgentControlMode: (mode: 'auto' | 'approval' | 'whitelist') => {
+        set({ agentControlMode: mode });
+        (window as any).electron.storeSet('agentControlMode', mode);
+    },
+
+    setAgentWhitelist: (list: string[]) => {
+        set({ agentWhitelist: list });
+        (window as any).electron.storeSet('agentWhitelist', list);
+    },
+
     // Bookmarks
     bookmarks: [],
     toggleBookmark: (path: string) => {
@@ -263,6 +279,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const savedAiModel = await window.electron.storeGet('aiModel');
         const savedAiPrivacyMode = await window.electron.storeGet('aiPrivacyMode');
         const savedAiSendShortcut = await window.electron.storeGet('aiSendShortcut');
+        const savedAgentControlMode = await (window as any).electron.storeGet('agentControlMode');
+        const savedAgentWhitelist = await (window as any).electron.storeGet('agentWhitelist');
 
         const aiEnabled = typeof savedAiEnabled === 'boolean' ? savedAiEnabled : true;
         const aiProvider = (savedAiProvider as AIProvider) || 'deepseek';
@@ -271,8 +289,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const aiModel = (savedAiModel as string) || '';
         const aiPrivacyMode = typeof savedAiPrivacyMode === 'boolean' ? savedAiPrivacyMode : false;
         const aiSendShortcut = (savedAiSendShortcut as 'enter' | 'ctrlEnter') || 'ctrlEnter';
+        const agentControlMode = (savedAgentControlMode as 'auto' | 'approval' | 'whitelist') || 'auto';
+        const agentWhitelist = Array.isArray(savedAgentWhitelist) ? savedAgentWhitelist : get().agentWhitelist;
 
-        set({ aiEnabled, aiProvider, aiApiKey, aiBaseUrl, aiModel, aiPrivacyMode, aiSendShortcut });
+        set({ aiEnabled, aiProvider, aiApiKey, aiBaseUrl, aiModel, aiPrivacyMode, aiSendShortcut, agentControlMode, agentWhitelist });
 
         // Initialize AI service
         if (aiApiKey || aiProvider === 'ollama') {

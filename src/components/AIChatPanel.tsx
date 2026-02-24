@@ -1,6 +1,6 @@
 // AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
@@ -30,9 +30,11 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [abortController, setAbortController] = useState<AbortController | null>(null);
+    const [pendingCommands, setPendingCommands] = useState<{ cmd: string; msgId: string }[]>([]);
+    const [showModeMenu, setShowModeMenu] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const { aiSendShortcut } = useSettingsStore();
+    const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist } = useSettingsStore();
 
     // Rolling buffer of recent terminal output (last 100 lines), stripped of ANSI codes
     const terminalBufferRef = useRef<string[]>([]);
@@ -163,23 +165,67 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                     : m
             );
 
-            // Auto-execute extracted commands
+            // Handle commands based on agent control mode
             if (commands.length > 0) {
-                const toolMessages: AgentMessage[] = commands.map((cmd, i) => ({
-                    id: `${assistantId}-tool-${i}`,
-                    role: 'tool' as const,
-                    content: `执行命令: ${cmd}`,
-                    timestamp: Date.now(),
-                    toolCall: { name: 'execute_command', command: cmd, status: 'executed' as const },
-                }));
-
-                onMessagesChange([...finalMessages, ...toolMessages]);
-
-                // Execute commands in terminal
-                for (const cmd of commands) {
-                    onExecuteCommand(cmd + '\n');
-                    // Small delay between commands
-                    await new Promise(r => setTimeout(r, 300));
+                if (agentControlMode === 'auto') {
+                    // Auto mode: execute all commands immediately
+                    const toolMessages: AgentMessage[] = commands.map((cmd, i) => ({
+                        id: `${assistantId}-tool-${i}`,
+                        role: 'tool' as const,
+                        content: `执行命令: ${cmd}`,
+                        timestamp: Date.now(),
+                        toolCall: { name: 'execute_command', command: cmd, status: 'executed' as const },
+                    }));
+                    onMessagesChange([...finalMessages, ...toolMessages]);
+                    for (const cmd of commands) {
+                        onExecuteCommand(cmd + '\n');
+                        await new Promise(r => setTimeout(r, 300));
+                    }
+                } else if (agentControlMode === 'whitelist') {
+                    // Whitelist mode: auto-execute whitelisted, queue others for approval
+                    const autoExec: string[] = [];
+                    const needApproval: string[] = [];
+                    for (const cmd of commands) {
+                        const firstWord = cmd.trim().split(/\s+/)[0];
+                        if (agentWhitelist.some(w => firstWord === w)) {
+                            autoExec.push(cmd);
+                        } else {
+                            needApproval.push(cmd);
+                        }
+                    }
+                    const toolMessages: AgentMessage[] = autoExec.map((cmd, i) => ({
+                        id: `${assistantId}-tool-${i}`,
+                        role: 'tool' as const,
+                        content: `执行命令: ${cmd}`,
+                        timestamp: Date.now(),
+                        toolCall: { name: 'execute_command', command: cmd, status: 'executed' as const },
+                    }));
+                    const pendingToolMessages: AgentMessage[] = needApproval.map((cmd, i) => ({
+                        id: `${assistantId}-pending-${i}`,
+                        role: 'tool' as const,
+                        content: `等待批准: ${cmd}`,
+                        timestamp: Date.now(),
+                        toolCall: { name: 'execute_command', command: cmd, status: 'pending' as const },
+                    }));
+                    onMessagesChange([...finalMessages, ...toolMessages, ...pendingToolMessages]);
+                    for (const cmd of autoExec) {
+                        onExecuteCommand(cmd + '\n');
+                        await new Promise(r => setTimeout(r, 300));
+                    }
+                    if (needApproval.length > 0) {
+                        setPendingCommands(needApproval.map((cmd, i) => ({ cmd, msgId: `${assistantId}-pending-${i}` })));
+                    }
+                } else {
+                    // Approval mode: all commands need approval
+                    const pendingToolMessages: AgentMessage[] = commands.map((cmd, i) => ({
+                        id: `${assistantId}-pending-${i}`,
+                        role: 'tool' as const,
+                        content: `等待批准: ${cmd}`,
+                        timestamp: Date.now(),
+                        toolCall: { name: 'execute_command', command: cmd, status: 'pending' as const },
+                    }));
+                    onMessagesChange([...finalMessages, ...pendingToolMessages]);
+                    setPendingCommands(commands.map((cmd, i) => ({ cmd, msgId: `${assistantId}-pending-${i}` })));
                 }
             } else {
                 onMessagesChange(finalMessages);
@@ -255,25 +301,136 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                 <div ref={messagesEndRef} />
             </div>
 
+            {/* Pending approval bar */}
+            {pendingCommands.length > 0 && (
+                <div className="border-t border-border px-3 py-2 bg-yellow-500/5">
+                    <div className="text-[11px] font-medium text-yellow-600 dark:text-yellow-400 mb-1.5">⏳ {pendingCommands.length} 个命令等待批准</div>
+                    <div className="space-y-1">
+                        {pendingCommands.map(({ cmd, msgId }, idx) => (
+                            <div key={msgId} className="flex items-center gap-2 text-xs">
+                                <code className="flex-1 bg-secondary/60 px-2 py-1 rounded font-mono text-[11px] truncate">{cmd}</code>
+                                <button
+                                    onClick={() => {
+                                        onExecuteCommand(cmd + '\n');
+                                        // Update message status
+                                        const updatedMsgs = messages.map(m =>
+                                            m.id === msgId ? { ...m, content: `执行命令: ${cmd}`, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m
+                                        );
+                                        onMessagesChange(updatedMsgs);
+                                        setPendingCommands(prev => prev.filter((_, i) => i !== idx));
+                                    }}
+                                    className="p-1 rounded bg-green-500/20 text-green-600 hover:bg-green-500/30 transition-colors"
+                                    title="批准执行"
+                                >
+                                    <Check className="w-3 h-3" />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const updatedMsgs = messages.map(m =>
+                                            m.id === msgId ? { ...m, content: `已拒绝: ${cmd}`, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m
+                                        );
+                                        onMessagesChange(updatedMsgs);
+                                        setPendingCommands(prev => prev.filter((_, i) => i !== idx));
+                                    }}
+                                    className="p-1 rounded bg-red-500/20 text-red-600 hover:bg-red-500/30 transition-colors"
+                                    title="拒绝"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))}
+                        {pendingCommands.length > 1 && (
+                            <div className="flex gap-1.5 mt-1">
+                                <button
+                                    onClick={() => {
+                                        for (const { cmd } of pendingCommands) {
+                                            onExecuteCommand(cmd + '\n');
+                                        }
+                                        const updatedMsgs = messages.map(m => {
+                                            const pc = pendingCommands.find(p => p.msgId === m.id);
+                                            return pc ? { ...m, content: `执行命令: ${pc.cmd}`, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m;
+                                        });
+                                        onMessagesChange(updatedMsgs);
+                                        setPendingCommands([]);
+                                    }}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-600 hover:bg-green-500/30 transition-colors"
+                                >
+                                    全部批准
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const updatedMsgs = messages.map(m => {
+                                            const pc = pendingCommands.find(p => p.msgId === m.id);
+                                            return pc ? { ...m, content: `已拒绝: ${pc.cmd}`, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m;
+                                        });
+                                        onMessagesChange(updatedMsgs);
+                                        setPendingCommands([]);
+                                    }}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-600 hover:bg-red-500/30 transition-colors"
+                                >
+                                    全部拒绝
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Input Area */}
             <div className="border-t border-border p-3 bg-background/50">
-                <div className="flex items-end gap-2">
-                    <div className="flex-1 relative">
-                        <textarea
-                            ref={textareaRef}
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="告诉 AI 你想做什么..."
-                            rows={1}
-                            className="w-full resize-none bg-secondary/40 rounded-xl px-4 py-2.5 pr-10 text-sm outline-none border border-border/50 focus:border-primary/50 transition-colors placeholder:text-muted-foreground/50"
-                            disabled={isLoading}
-                        />
-                    </div>
+                {/* Mode selector bar */}
+                <div className="flex items-center gap-2 mb-2 relative">
+                    <button
+                        onClick={() => setShowModeMenu(!showModeMenu)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40"
+                    >
+                        {agentControlMode === 'auto' && <><Zap className="w-3 h-3 text-green-500" />完全 AI 控制</>}
+                        {agentControlMode === 'approval' && <><Shield className="w-3 h-3 text-yellow-500" />批准模式</>}
+                        {agentControlMode === 'whitelist' && <><ShieldCheck className="w-3 h-3 text-blue-500" />白名单模式</>}
+                        <ChevronDown className="w-2.5 h-2.5" />
+                    </button>
+                    {showModeMenu && (
+                        <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 min-w-[200px]">
+                            {[
+                                { id: 'auto' as const, icon: <Zap className="w-3.5 h-3.5 text-green-500" />, label: '完全 AI 控制', desc: '所有命令自动执行' },
+                                { id: 'approval' as const, icon: <Shield className="w-3.5 h-3.5 text-yellow-500" />, label: '批准模式', desc: '每条命令需要手动批准' },
+                                { id: 'whitelist' as const, icon: <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />, label: '白名单模式', desc: '白名单内命令自动执行' },
+                            ].map(opt => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => { setAgentControlMode(opt.id); setShowModeMenu(false); }}
+                                    className={cn(
+                                        "w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-accent transition-colors",
+                                        agentControlMode === opt.id && "bg-accent/50"
+                                    )}
+                                >
+                                    {opt.icon}
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-medium">{opt.label}</span>
+                                        <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
+                                    </div>
+                                    {agentControlMode === opt.id && <Check className="w-3 h-3 text-primary ml-auto mt-0.5" />}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="relative">
+                    <textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="告诉 AI 你想做什么..."
+                        rows={1}
+                        className="w-full resize-none bg-secondary/40 rounded-xl px-4 py-2.5 pr-12 text-sm outline-none border border-border/50 focus:border-primary/50 transition-colors placeholder:text-muted-foreground/50"
+                        disabled={isLoading}
+                    />
                     {isLoading ? (
                         <button
                             onClick={handleStop}
-                            className="p-2.5 rounded-xl bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors flex-shrink-0"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors"
                             title="停止生成"
                         >
                             <Square className="w-4 h-4" />
@@ -283,7 +440,7 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                             onClick={handleSend}
                             disabled={!input.trim()}
                             className={cn(
-                                "p-2.5 rounded-xl transition-colors flex-shrink-0",
+                                "absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors",
                                 input.trim()
                                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                     : "bg-secondary/60 text-muted-foreground cursor-not-allowed"
@@ -296,7 +453,6 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                 </div>
                 <div className="text-[10px] text-muted-foreground/50 mt-1.5 px-1">
                     {aiSendShortcut === 'ctrlEnter' ? 'Ctrl+Enter 发送 · Shift+Enter 换行' : 'Enter 发送 · Shift+Enter 换行'}
-                    {' · AI 回复中的命令将自动执行'}
                 </div>
             </div>
         </div>
