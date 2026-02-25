@@ -11,8 +11,10 @@ export interface AIConfig {
 }
 
 export interface ChatMessage {
-    role: 'system' | 'user' | 'assistant';
-    content: string;
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    content: string | null;
+    tool_calls?: ToolCall[];
+    tool_call_id?: string;
 }
 
 export interface AICompletionRequest {
@@ -26,6 +28,52 @@ export interface AICompletionResponse {
     content: string;
     finishReason?: string;
 }
+
+// Function Calling types
+export interface ToolDefinition {
+    type: 'function';
+    function: {
+        name: string;
+        description: string;
+        parameters: object;
+    };
+}
+
+export interface ToolCall {
+    id: string;
+    type: 'function';
+    function: {
+        name: string;
+        arguments: string;
+    };
+}
+
+export interface ToolCompletionResponse {
+    content: string | null;
+    toolCalls: ToolCall[] | null;
+    finishReason: string;
+}
+
+// Agent tools definition
+export const AGENT_TOOLS: ToolDefinition[] = [
+    {
+        type: 'function',
+        function: {
+            name: 'execute_ssh_command',
+            description: '在远程 Linux 服务器上通过 SSH 执行一条 Shell 命令，返回 stdout、stderr 和 exitCode。每次只能执行一条命令。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    command: {
+                        type: 'string',
+                        description: '要执行的 Linux Shell 命令，例如 "df -h"、"systemctl status nginx"'
+                    }
+                },
+                required: ['command']
+            }
+        }
+    }
+];
 
 // Default configurations for each provider
 export const AI_PROVIDER_CONFIGS: Record<AIProvider, { baseUrl: string; defaultModel: string; displayName: string; hasFreeTier: boolean; note?: string }> = {
@@ -122,36 +170,23 @@ export const AI_SYSTEM_PROMPTS = {
 
 回答要简洁专业，使用中文，字数控制在 200 字以内。`,
 
-    agent: `你是一个专业的 Linux 服务器管理助手。你通过 SSH 连接直接管理用户的服务器。
+    agent: `你是一个专业的 Linux 服务器管理助手（Agent）。你通过 SSH 连接直接管理用户的服务器。
 
-## 核心规则
+你拥有一个工具：execute_ssh_command，可以在服务器上执行任意 Shell 命令。系统会自动将命令输出返回给你。
 
-1. **执行命令**：当需要在服务器上执行操作时，将命令放在 \`\`\`bash 代码块中，系统会自动执行。
-2. **一步一步来**：每次只执行必要的命令，观察结果后再决定下一步。
-3. **安全优先**：
-   - 对于危险操作（rm -rf、shutdown、数据库删除等），必须先告知用户并等待确认
-   - 执行前先用安全命令检查状态（如 ls、cat、df 等）
-   - 如果不确定，先用 --dry-run 或 -n 参数测试
-4. **报告结果**：每次操作后用中文简要说明执行了什么、结果如何
+## 工作方式
 
-## 输出格式
+1. **思考**：分析用户的需求，决定下一步需要什么信息或操作
+2. **执行**：调用 execute_ssh_command 执行一条命令
+3. **观察**：阅读命令输出，分析结果
+4. **循环**：根据结果决定是继续执行下一步，还是向用户汇报
 
-- 文字解释用中文
-- 命令用 \`\`\`bash 代码块包裹
-- 每个代码块只放一个逻辑操作的命令
+## 规则
 
-## 示例
-
-用户：看看磁盘空间
-回复：我来查看一下磁盘使用情况：
-\`\`\`bash
-df -h
-\`\`\`
-
-用户：清理 /tmp 下 7 天前的文件
-回复：我先查看一下会删除哪些文件：
-\`\`\`bash
-find /tmp -type f -mtime +7 -ls
-\`\`\`
-查看后如果确认可以删除，我再执行清理。`
+- 每次只调用一个命令，观察结果后再决定下一步
+- 先用只读命令（ls、cat、df、ps 等）了解情况，再做修改操作
+- 对于危险操作（rm -rf、shutdown、数据库删除等），先用文字告知用户风险，不要直接执行
+- 用简洁的中文解释你在做什么、结果如何
+- 如果命令出错，分析原因并尝试其他方案`
 };
+

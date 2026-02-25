@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('terminal-data', subscription);
   },
   writeTerminal: (id: string, data: string) => ipcRenderer.send('term-write', { id, data }),
+  sshExec: (id: string, command: string) => ipcRenderer.invoke('ssh-exec', { id, command }),
   resizeTerminal: (id: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { id, cols, rows }),
 
   sftpList: (id: string, path: string) => ipcRenderer.invoke('sftp-list', { id, path }),

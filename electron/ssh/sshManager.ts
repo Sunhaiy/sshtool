@@ -131,6 +131,41 @@ export class SSHManager {
         if (stream) stream.setWindow(rows, cols, 0, 0);
     }
 
+    // General-purpose command execution (for Agent mode)
+    // Uses conn.exec() — separate channel from the interactive shell
+    async exec(id: string, command: string, timeoutMs = 30000): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(`Command timed out after ${timeoutMs / 1000}s`));
+            }, timeoutMs);
+
+            conn.exec(command, (err, stream) => {
+                if (err) {
+                    clearTimeout(timer);
+                    return reject(err);
+                }
+
+                let stdout = '';
+                let stderr = '';
+
+                stream.on('data', (data: Buffer) => { stdout += data.toString(); });
+                stream.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+                stream.on('close', (code: number) => {
+                    clearTimeout(timer);
+                    // Truncate very long output to avoid overwhelming AI context
+                    const maxLen = 10240; // 10KB
+                    if (stdout.length > maxLen) stdout = stdout.slice(0, maxLen) + '\n... (output truncated)';
+                    if (stderr.length > maxLen) stderr = stderr.slice(0, maxLen) + '\n... (output truncated)';
+                    resolve({ stdout, stderr, exitCode: code ?? 0 });
+                });
+            });
+        });
+    }
+
     // SFTP Operations
     async sftpOperation(id: string, operation: (sftp: any) => Promise<any>): Promise<any> {
         const conn = this.connections.get(id);

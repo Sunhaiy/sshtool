@@ -1,6 +1,6 @@
 // AI Service - Handles communication with AI providers (DeepSeek, OpenAI, etc.)
 
-import { AIConfig, AICompletionRequest, AICompletionResponse, AI_PROVIDER_CONFIGS, ChatMessage } from '../shared/aiTypes';
+import { AIConfig, AICompletionRequest, AICompletionResponse, AI_PROVIDER_CONFIGS, ChatMessage, ToolDefinition, ToolCall, ToolCompletionResponse } from '../shared/aiTypes';
 
 class AIService {
     private config: AIConfig | null = null;
@@ -74,7 +74,7 @@ class AIService {
         // Sanitize messages if privacy mode is on
         const sanitizedMessages = request.messages.map(msg => ({
             ...msg,
-            content: this.sanitize(msg.content)
+            content: this.sanitize(msg.content || '')
         }));
 
         // Choose endpoint and headers based on provider
@@ -153,7 +153,7 @@ class AIService {
         // Sanitize messages if privacy mode is on
         const sanitizedMessages = request.messages.map(msg => ({
             ...msg,
-            content: this.sanitize(msg.content)
+            content: this.sanitize(msg.content || '')
         }));
 
         const isOllama = this.config.provider === 'ollama';
@@ -233,7 +233,67 @@ class AIService {
         }
     }
 
-    // Helper: Text to command
+    // Non-streaming completion with Function Calling (tools)
+    async completeWithTools(request: {
+        messages: ChatMessage[];
+        tools: ToolDefinition[];
+        temperature?: number;
+    }): Promise<ToolCompletionResponse> {
+        if (!this.config) {
+            throw new Error('AI service not configured.');
+        }
+        if (this.config.provider !== 'ollama' && !this.config.apiKey) {
+            throw new Error('API key required.');
+        }
+
+        const providerConfig = AI_PROVIDER_CONFIGS[this.config.provider];
+        const baseUrl = this.config.baseUrl || providerConfig.baseUrl;
+        const model = this.config.model || providerConfig.defaultModel;
+        const isOllama = this.config.provider === 'ollama';
+        const endpoint = this.getEndpoint(baseUrl, isOllama);
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        if (this.config.provider === 'openrouter') {
+            headers['HTTP-Referer'] = 'https://sshtool.app';
+            headers['X-Title'] = 'SSH Tool';
+        }
+
+        const sanitizedMessages = request.messages.map(msg => ({
+            ...msg,
+            content: msg.content ? this.sanitize(msg.content) : msg.content,
+        }));
+
+        const requestBody: any = {
+            model,
+            messages: sanitizedMessages,
+            temperature: request.temperature ?? 0.7,
+            stream: false,
+            tools: request.tools,
+        };
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`AI request failed: ${error}`);
+        }
+
+        const data = await response.json();
+        const choice = data.choices?.[0];
+        const message = choice?.message;
+
+        return {
+            content: message?.content || null,
+            toolCalls: message?.tool_calls || null,
+            finishReason: choice?.finish_reason || 'stop',
+        };
+    }
+
     async textToCommand(naturalLanguage: string, context?: string): Promise<string> {
         const messages: ChatMessage[] = [
             { role: 'system', content: (await import('../shared/aiTypes')).AI_SYSTEM_PROMPTS.textToCommand },

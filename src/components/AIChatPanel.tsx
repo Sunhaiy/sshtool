@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X } from 'lucide-react';
 import { aiService } from '../services/aiService';
+import { AI_SYSTEM_PROMPTS, AGENT_TOOLS } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 
@@ -29,48 +30,20 @@ interface AIChatPanelProps {
 export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecuteCommand, className }: AIChatPanelProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [abortController, setAbortController] = useState<AbortController | null>(null);
-    const [pendingCommands, setPendingCommands] = useState<{ cmd: string; msgId: string }[]>([]);
+    const [pendingCommands, setPendingCommands] = useState<{ cmd: string; msgId: string; aiMessages: any[] }[]>([]);
     const [showModeMenu, setShowModeMenu] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const latestMessagesRef = useRef(messages);
     const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist } = useSettingsStore();
+    const agentControlModeRef = useRef(agentControlMode);
+    const agentWhitelistRef = useRef(agentWhitelist);
+    const isLoadingRef = useRef(false);
 
-    // Rolling buffer of recent terminal output (last 100 lines), stripped of ANSI codes
-    const terminalBufferRef = useRef<string[]>([]);
-
-    // Subscribe to terminal data for this connection and maintain the buffer
-    useEffect(() => {
-        const eWindow = window as any;
-        if (!eWindow.electron?.onTerminalData) return;
-
-        const stripAnsi = (str: string) =>
-            // Remove ANSI escape sequences (colors, cursor movements, etc.)
-            str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
-
-        const cleanup = eWindow.electron.onTerminalData(
-            (_: any, { id, data }: { id: string; data: string }) => {
-                if (id !== connectionId) return;
-                const clean = stripAnsi(data);
-                // Split incoming data into lines and add to buffer
-                const incoming = clean.split(/\r?\n/);
-                terminalBufferRef.current = [
-                    ...terminalBufferRef.current,
-                    ...incoming,
-                ].filter(l => l.trim()).slice(-100); // keep last 100 non-empty lines
-            }
-        );
-        return cleanup;
-    }, [connectionId]);
-
-    /** Get recent terminal output as a context string for the AI */
-    const getTerminalContext = () => {
-        const lines = terminalBufferRef.current;
-        if (lines.length === 0) return '';
-        // Send last 80 lines to avoid huge token usage
-        const recent = lines.slice(-80).join('\n');
-        return `\n\n---\n[当前终端最近输出]\n\`\`\`\n${recent}\n\`\`\`\n请根据以上终端输出来了解服务器当前状态并回答用户的问题。`;
-    };
+    // Keep refs in sync
+    useEffect(() => { latestMessagesRef.current = messages; }, [messages]);
+    useEffect(() => { agentControlModeRef.current = agentControlMode; }, [agentControlMode]);
+    useEffect(() => { agentWhitelistRef.current = agentWhitelist; }, [agentWhitelist]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -85,15 +58,230 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
         }
     }, [input]);
 
-    const extractCommands = (text: string): string[] => {
-        const regex = /```(?:bash|sh|shell|zsh)?\n([\s\S]*?)```/g;
-        const commands: string[] = [];
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-            const cmd = match[1].trim();
-            if (cmd) commands.push(cmd);
+    // Execute a command via SSH exec IPC and return result
+    const execCommand = async (command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+        const eWindow = window as any;
+        if (!eWindow.electron?.sshExec) {
+            throw new Error('SSH exec not available');
         }
-        return commands;
+        // Also write to terminal so user can see
+        eWindow.electron.writeTerminal(connectionId, command + '\n');
+        const result = await eWindow.electron.sshExec(connectionId, command);
+        return result;
+    };
+
+    // Check if a command needs approval based on current mode
+    const needsApproval = (command: string): boolean => {
+        const mode = agentControlModeRef.current;
+        if (mode === 'auto') return false;
+        if (mode === 'approval') return true;
+        // whitelist mode: check first word
+        const firstWord = command.trim().split(/\s+/)[0];
+        const whitelist = agentWhitelistRef.current;
+        return !whitelist.some(w => firstWord === w);
+    };
+
+    // Build ChatMessage array from our AgentMessages for the AI API
+    const buildChatMessages = (msgs: AgentMessage[]): any[] => {
+        const chatMsgs: any[] = [
+            { role: 'system', content: AI_SYSTEM_PROMPTS.agent },
+        ];
+        for (const m of msgs) {
+            if (m.role === 'user') {
+                chatMsgs.push({ role: 'user', content: m.content });
+            } else if (m.role === 'assistant') {
+                if (m.toolCall) {
+                    // This was an assistant message that had a tool_call
+                    chatMsgs.push({
+                        role: 'assistant',
+                        content: m.content || null,
+                        tool_calls: [{
+                            id: m.id,
+                            type: 'function',
+                            function: {
+                                name: 'execute_ssh_command',
+                                arguments: JSON.stringify({ command: m.toolCall.command }),
+                            }
+                        }]
+                    });
+                } else {
+                    chatMsgs.push({ role: 'assistant', content: m.content });
+                }
+            } else if (m.role === 'tool') {
+                chatMsgs.push({
+                    role: 'tool',
+                    content: m.content,
+                    tool_call_id: m.toolCall?.command ? m.id.replace('-result', '') : m.id,
+                });
+            }
+        }
+        return chatMsgs;
+    };
+
+    // The Agent Loop
+    const runAgentLoop = async (currentMessages: AgentMessage[]) => {
+        const MAX_ITERATIONS = 15;
+
+        let loopMessages = [...currentMessages];
+
+        for (let i = 0; i < MAX_ITERATIONS; i++) {
+            if (!isLoadingRef.current) break; // stopped by user
+
+            // Show thinking indicator
+            const thinkingId = `thinking-${Date.now()}`;
+            const thinkingMsg: AgentMessage = {
+                id: thinkingId,
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+                isStreaming: true,
+            };
+            onMessagesChange([...loopMessages, thinkingMsg]);
+
+            try {
+                const chatMessages = buildChatMessages(loopMessages);
+                const response = await aiService.completeWithTools({
+                    messages: chatMessages,
+                    tools: AGENT_TOOLS,
+                    temperature: 0.7,
+                });
+
+                // Remove thinking indicator
+                // Case 1: AI returned text (no tool call) — done
+                if (!response.toolCalls || response.toolCalls.length === 0) {
+                    const assistantMsg: AgentMessage = {
+                        id: `asst-${Date.now()}`,
+                        role: 'assistant',
+                        content: response.content || '（无回复）',
+                        timestamp: Date.now(),
+                    };
+                    loopMessages = [...loopMessages, assistantMsg];
+                    onMessagesChange(loopMessages);
+                    break; // Loop ends — AI is done
+                }
+
+                // Case 2: AI wants to call a tool
+                const toolCall = response.toolCalls[0];
+                const args = JSON.parse(toolCall.function.arguments);
+                const command = args.command as string;
+
+                // Add AI's thinking text + tool call intent as assistant message
+                const toolCallMsgId = `call-${Date.now()}`;
+                const assistantToolMsg: AgentMessage = {
+                    id: toolCallMsgId,
+                    role: 'assistant',
+                    content: response.content || '',
+                    timestamp: Date.now(),
+                    toolCall: {
+                        name: 'execute_ssh_command',
+                        command: command,
+                        status: 'pending',
+                    },
+                };
+                loopMessages = [...loopMessages, assistantToolMsg];
+                onMessagesChange(loopMessages);
+
+                // Check safety mode
+                if (needsApproval(command)) {
+                    // Queue for approval — pause the loop
+                    setPendingCommands(prev => [...prev, {
+                        cmd: command,
+                        msgId: toolCallMsgId,
+                        aiMessages: loopMessages, // snapshot for resuming
+                    }]);
+                    break; // Loop pauses — will resume when user approves
+                }
+
+                // Execute immediately
+                const result = await execCommand(command);
+
+                // Update assistant message status to executed
+                loopMessages = loopMessages.map(m =>
+                    m.id === toolCallMsgId
+                        ? { ...m, toolCall: { ...m.toolCall!, status: 'executed' as const } }
+                        : m
+                );
+
+                // Add tool result message
+                const resultContent = result.stderr
+                    ? `[exit ${result.exitCode}]\n${result.stdout}\n[stderr]\n${result.stderr}`
+                    : `[exit ${result.exitCode}]\n${result.stdout}`;
+
+                const toolResultMsg: AgentMessage = {
+                    id: `${toolCallMsgId}-result`,
+                    role: 'tool',
+                    content: resultContent,
+                    timestamp: Date.now(),
+                    toolCall: {
+                        name: 'execute_ssh_command',
+                        command: command,
+                        status: 'executed',
+                    },
+                };
+                loopMessages = [...loopMessages, toolResultMsg];
+                onMessagesChange(loopMessages);
+
+                // Continue loop — AI will analyze the result
+                await new Promise(r => setTimeout(r, 200)); // small delay
+
+            } catch (err: any) {
+                const errorMsg: AgentMessage = {
+                    id: `error-${Date.now()}`,
+                    role: 'assistant',
+                    content: `❌ 错误: ${err.message}`,
+                    timestamp: Date.now(),
+                };
+                loopMessages = [...loopMessages, errorMsg];
+                onMessagesChange(loopMessages);
+                break;
+            }
+        }
+    };
+
+    // Resume agent loop after user approves a pending command
+    const resumeAfterApproval = async (command: string, msgId: string, snapshotMessages: AgentMessage[]) => {
+        setIsLoading(true);
+        isLoadingRef.current = true;
+
+        try {
+            const result = await execCommand(command);
+
+            // Update the assistant message to show executed
+            let loopMessages = snapshotMessages.map(m =>
+                m.id === msgId
+                    ? { ...m, toolCall: { ...m.toolCall!, status: 'executed' as const } }
+                    : m
+            );
+
+            // Add tool result
+            const resultContent = result.stderr
+                ? `[exit ${result.exitCode}]\n${result.stdout}\n[stderr]\n${result.stderr}`
+                : `[exit ${result.exitCode}]\n${result.stdout}`;
+
+            const toolResultMsg: AgentMessage = {
+                id: `${msgId}-result`,
+                role: 'tool',
+                content: resultContent,
+                timestamp: Date.now(),
+                toolCall: { name: 'execute_ssh_command', command, status: 'executed' },
+            };
+            loopMessages = [...loopMessages, toolResultMsg];
+            onMessagesChange(loopMessages);
+
+            // Continue the agent loop
+            await runAgentLoop(loopMessages);
+        } catch (err: any) {
+            const errorMsg: AgentMessage = {
+                id: `error-${Date.now()}`,
+                role: 'assistant',
+                content: `❌ 执行失败: ${err.message}`,
+                timestamp: Date.now(),
+            };
+            onMessagesChange([...latestMessagesRef.current, errorMsg]);
+        } finally {
+            setIsLoading(false);
+            isLoadingRef.current = false;
+        }
     };
 
     const handleSend = async () => {
@@ -121,125 +309,13 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
         onMessagesChange(updatedMessages);
         setInput('');
         setIsLoading(true);
-
-        const assistantId = (Date.now() + 1).toString();
-        const assistantMsg: AgentMessage = {
-            id: assistantId,
-            role: 'assistant',
-            content: '',
-            timestamp: Date.now(),
-            isStreaming: true,
-        };
-
-        const withAssistant = [...updatedMessages, assistantMsg];
-        onMessagesChange(withAssistant);
+        isLoadingRef.current = true;
 
         try {
-            // Build messages for AI
-            const systemPrompt = (await import('../shared/aiTypes')).AI_SYSTEM_PROMPTS.agent;
-            const terminalContext = getTerminalContext();
-            const chatMessages = [
-                { role: 'system' as const, content: systemPrompt + terminalContext },
-                ...updatedMessages.map(m => ({
-                    role: m.role === 'tool' ? 'assistant' as const : m.role as 'user' | 'assistant',
-                    content: m.content,
-                })),
-            ];
-
-            let fullContent = '';
-            const stream = aiService.streamComplete({ messages: chatMessages, temperature: 0.7 });
-
-            for await (const chunk of stream) {
-                fullContent += chunk;
-                const streamingMessages = withAssistant.map(m =>
-                    m.id === assistantId ? { ...m, content: fullContent } : m
-                );
-                onMessagesChange(streamingMessages);
-            }
-
-            // Finalize message
-            const commands = extractCommands(fullContent);
-            const finalMessages = withAssistant.map(m =>
-                m.id === assistantId
-                    ? { ...m, content: fullContent, isStreaming: false }
-                    : m
-            );
-
-            // Handle commands based on agent control mode
-            if (commands.length > 0) {
-                if (agentControlMode === 'auto') {
-                    // Auto mode: execute all commands immediately
-                    const toolMessages: AgentMessage[] = commands.map((cmd, i) => ({
-                        id: `${assistantId}-tool-${i}`,
-                        role: 'tool' as const,
-                        content: `执行命令: ${cmd}`,
-                        timestamp: Date.now(),
-                        toolCall: { name: 'execute_command', command: cmd, status: 'executed' as const },
-                    }));
-                    onMessagesChange([...finalMessages, ...toolMessages]);
-                    for (const cmd of commands) {
-                        onExecuteCommand(cmd + '\n');
-                        await new Promise(r => setTimeout(r, 300));
-                    }
-                } else if (agentControlMode === 'whitelist') {
-                    // Whitelist mode: auto-execute whitelisted, queue others for approval
-                    const autoExec: string[] = [];
-                    const needApproval: string[] = [];
-                    for (const cmd of commands) {
-                        const firstWord = cmd.trim().split(/\s+/)[0];
-                        if (agentWhitelist.some(w => firstWord === w)) {
-                            autoExec.push(cmd);
-                        } else {
-                            needApproval.push(cmd);
-                        }
-                    }
-                    const toolMessages: AgentMessage[] = autoExec.map((cmd, i) => ({
-                        id: `${assistantId}-tool-${i}`,
-                        role: 'tool' as const,
-                        content: `执行命令: ${cmd}`,
-                        timestamp: Date.now(),
-                        toolCall: { name: 'execute_command', command: cmd, status: 'executed' as const },
-                    }));
-                    const pendingToolMessages: AgentMessage[] = needApproval.map((cmd, i) => ({
-                        id: `${assistantId}-pending-${i}`,
-                        role: 'tool' as const,
-                        content: `等待批准: ${cmd}`,
-                        timestamp: Date.now(),
-                        toolCall: { name: 'execute_command', command: cmd, status: 'pending' as const },
-                    }));
-                    onMessagesChange([...finalMessages, ...toolMessages, ...pendingToolMessages]);
-                    for (const cmd of autoExec) {
-                        onExecuteCommand(cmd + '\n');
-                        await new Promise(r => setTimeout(r, 300));
-                    }
-                    if (needApproval.length > 0) {
-                        setPendingCommands(needApproval.map((cmd, i) => ({ cmd, msgId: `${assistantId}-pending-${i}` })));
-                    }
-                } else {
-                    // Approval mode: all commands need approval
-                    const pendingToolMessages: AgentMessage[] = commands.map((cmd, i) => ({
-                        id: `${assistantId}-pending-${i}`,
-                        role: 'tool' as const,
-                        content: `等待批准: ${cmd}`,
-                        timestamp: Date.now(),
-                        toolCall: { name: 'execute_command', command: cmd, status: 'pending' as const },
-                    }));
-                    onMessagesChange([...finalMessages, ...pendingToolMessages]);
-                    setPendingCommands(commands.map((cmd, i) => ({ cmd, msgId: `${assistantId}-pending-${i}` })));
-                }
-            } else {
-                onMessagesChange(finalMessages);
-            }
-        } catch (err: any) {
-            const errorMessages = withAssistant.map(m =>
-                m.id === assistantId
-                    ? { ...m, content: `❌ 错误: ${err.message}`, isStreaming: false }
-                    : m
-            );
-            onMessagesChange(errorMessages);
+            await runAgentLoop(updatedMessages);
         } finally {
             setIsLoading(false);
-            setAbortController(null);
+            isLoadingRef.current = false;
         }
     };
 
@@ -255,7 +331,7 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
     };
 
     const handleStop = () => {
-        abortController?.abort();
+        isLoadingRef.current = false;
         setIsLoading(false);
     };
 
@@ -306,21 +382,17 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                 <div className="border-t border-border px-3 py-2 bg-yellow-500/5">
                     <div className="text-[11px] font-medium text-yellow-600 dark:text-yellow-400 mb-1.5">⏳ {pendingCommands.length} 个命令等待批准</div>
                     <div className="space-y-1">
-                        {pendingCommands.map(({ cmd, msgId }, idx) => (
+                        {pendingCommands.map(({ cmd, msgId, aiMessages }, idx) => (
                             <div key={msgId} className="flex items-center gap-2 text-xs">
                                 <code className="flex-1 bg-secondary/60 px-2 py-1 rounded font-mono text-[11px] truncate">{cmd}</code>
                                 <button
                                     onClick={() => {
-                                        onExecuteCommand(cmd + '\n');
-                                        // Update message status
-                                        const updatedMsgs = messages.map(m =>
-                                            m.id === msgId ? { ...m, content: `执行命令: ${cmd}`, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m
-                                        );
-                                        onMessagesChange(updatedMsgs);
                                         setPendingCommands(prev => prev.filter((_, i) => i !== idx));
+                                        resumeAfterApproval(cmd, msgId, aiMessages);
                                     }}
                                     className="p-1 rounded bg-green-500/20 text-green-600 hover:bg-green-500/30 transition-colors"
                                     title="批准执行"
+                                    disabled={isLoading}
                                 >
                                     <Check className="w-3 h-3" />
                                 </button>
@@ -342,18 +414,17 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                         {pendingCommands.length > 1 && (
                             <div className="flex gap-1.5 mt-1">
                                 <button
-                                    onClick={() => {
-                                        for (const { cmd } of pendingCommands) {
-                                            onExecuteCommand(cmd + '\n');
-                                        }
-                                        const updatedMsgs = messages.map(m => {
-                                            const pc = pendingCommands.find(p => p.msgId === m.id);
-                                            return pc ? { ...m, content: `执行命令: ${pc.cmd}`, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m;
-                                        });
-                                        onMessagesChange(updatedMsgs);
+                                    onClick={async () => {
+                                        const all = [...pendingCommands];
                                         setPendingCommands([]);
+                                        // Execute first one and resume loop
+                                        if (all.length > 0) {
+                                            const first = all[0];
+                                            resumeAfterApproval(first.cmd, first.msgId, first.aiMessages);
+                                        }
                                     }}
                                     className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-600 hover:bg-green-500/30 transition-colors"
+                                    disabled={isLoading}
                                 >
                                     全部批准
                                 </button>
@@ -424,7 +495,7 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                         onKeyDown={handleKeyDown}
                         placeholder="告诉 AI 你想做什么..."
                         rows={1}
-                        className="w-full resize-none bg-secondary/40 rounded-xl px-4 py-2.5 pr-12 text-sm outline-none border border-border/50 focus:border-primary/50 transition-colors placeholder:text-muted-foreground/50"
+                        className="w-full resize-none overflow-hidden bg-secondary/40 rounded-xl px-4 py-2.5 pr-12 text-sm outline-none border border-border/50 focus:border-primary/50 transition-colors placeholder:text-muted-foreground/50"
                         disabled={isLoading}
                     />
                     {isLoading ? (
@@ -464,6 +535,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
     const [expanded, setExpanded] = useState(true);
 
     if (message.role === 'tool') {
+        const isPending = message.toolCall?.status === 'pending';
         return (
             <div className="px-2">
                 <button
@@ -471,9 +543,13 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
                 >
                     {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    <Terminal className="w-3 h-3 text-primary" />
+                    <Terminal className={cn("w-3 h-3", isPending ? "text-yellow-500" : "text-primary")} />
                     <span className="font-mono">{message.toolCall?.command}</span>
-                    <span className="ml-auto text-[10px] text-green-500">✓ 已执行</span>
+                    {isPending ? (
+                        <span className="ml-auto text-[10px] text-yellow-500">⏳ 待批准</span>
+                    ) : (
+                        <span className="ml-auto text-[10px] text-green-500">✓ 已执行</span>
+                    )}
                 </button>
             </div>
         );

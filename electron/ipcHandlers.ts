@@ -29,6 +29,11 @@ export function setupIpcHandlers() {
     sshManager.resize(id, cols, rows);
   });
 
+  // Agent mode: exec command and return stdout/stderr/exitCode
+  ipcMain.handle('ssh-exec', async (event, { id, command }) => {
+    return sshManager.exec(id, command);
+  });
+
   ipcMain.handle('sftp-list', (event, { id, path }) => {
     console.log(`[IPC] sftp-list: id=${id}, path=${path}`);
     return sshManager.listFiles(id, path);
