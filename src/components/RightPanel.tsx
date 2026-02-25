@@ -3,12 +3,14 @@ import { SystemMonitor } from './SystemMonitor';
 import { DockerManager } from './DockerManager';
 import { Monitor, Container } from 'lucide-react';
 import { ErrorBoundary } from './ErrorBoundary';
+import { ConnectingLog } from './ConnectingOverlay';
 
 interface RightPanelProps {
     connectionId: string;
+    isConnected?: boolean;
 }
 
-export function RightPanel({ connectionId }: RightPanelProps) {
+export function RightPanel({ connectionId, isConnected = true }: RightPanelProps) {
     const [activeTab, setActiveTab] = useState<'monitor' | 'docker'>('monitor');
 
     return (

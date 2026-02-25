@@ -16,11 +16,12 @@ import { AgentMessage } from './components/AIChatPanel';
 import { TerminalSlotProvider, TerminalSlotConsumer } from './components/TerminalSlot';
 import { Modal } from './components/ui/modal';
 import { ConnectionForm } from './components/ConnectionForm';
+import { TerminalConnecting } from './components/ConnectingOverlay';
 
 interface AppSession {
   uniqueId: string;
   connection: SSHConnection;
-  status: 'connected' | 'disconnected';
+  status: 'connecting' | 'connected' | 'disconnected';
 }
 
 function App() {
@@ -73,23 +74,32 @@ function App() {
   }, [uiFontFamily]);
 
   const handleConnect = async (connection: SSHConnection) => {
-    // Create new session
+    // Navigate immediately — connect in background
     const uniqueId = Date.now().toString();
+    const newSession: AppSession = { uniqueId, connection, status: 'connecting' };
+    setSessions(prev => [...prev, newSession]);
+    setActiveSessionId(uniqueId);
+    setPage('workspace');
+    // @ts-ignore
+    window.lastSessionId = uniqueId;
+
+    // Connect in background
     const result = await (window as any).electron.connectSSH({
       connection,
       sessionId: uniqueId,
       profileId: connection.id
     });
-    // @ts-ignore
-    window.lastSessionId = uniqueId; // For debugging if needed
 
     if (result.success) {
-      const newSession: AppSession = { uniqueId, connection, status: 'connected' };
-      setSessions(prev => [...prev, newSession]);
-      setActiveSessionId(uniqueId);
-      setPage('workspace');
+      setSessions(prev => prev.map(s =>
+        s.uniqueId === uniqueId ? { ...s, status: 'connected' } : s
+      ));
     } else {
       alert('Connection failed: ' + result.error);
+      // Remove failed session
+      setSessions(prev => prev.filter(s => s.uniqueId !== uniqueId));
+      setPage('connections');
+      setActiveSessionId(null);
     }
   };
 
@@ -204,16 +214,23 @@ function App() {
                         leftContent={
                           <div className="h-full flex flex-col bg-card/50 rounded-lg border border-border overflow-hidden">
                             <ErrorBoundary name="FileBrowser">
-                              <FileBrowser connectionId={session.uniqueId} />
+                              <FileBrowser connectionId={session.uniqueId} isConnected={session.status === 'connected'} />
                             </ErrorBoundary>
                           </div>
                         }
                         middleContent={
-                          <div className="h-full bg-card/50 rounded-lg border border-border flex flex-col overflow-hidden">
+                          <div className="h-full bg-card/50 rounded-lg border border-border flex flex-col overflow-hidden relative">
                             <div className="flex-1 min-h-0 relative overflow-hidden">
                               {/* TerminalSlotConsumer: placeholder that adopts the stable terminal div */}
                               {workspaceMode === 'normal' && <TerminalSlotConsumer />}
                             </div>
+                            {/* Connecting overlay */}
+                            {session.status === 'connecting' && (
+                              <TerminalConnecting
+                                host={session.connection.host}
+                                username={session.connection.username || 'root'}
+                              />
+                            )}
                             {aiEnabled && (
                               <div className="flex-shrink-0 border-t border-border p-1.5 bg-transparent">
                                 <AICommandInput
@@ -229,7 +246,7 @@ function App() {
                         rightContent={
                           <div className="h-full bg-card/50 rounded-lg border border-border overflow-hidden">
                             <ErrorBoundary name="RightPanel">
-                              <RightPanel connectionId={session.uniqueId} />
+                              <RightPanel connectionId={session.uniqueId} isConnected={session.status === 'connected'} />
                             </ErrorBoundary>
                           </div>
                         }
@@ -249,6 +266,9 @@ function App() {
                         messages={getAgentMessages(session.uniqueId)}
                         onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
                         isActive={workspaceMode === 'agent'}
+                        sessionStatus={session.status}
+                        host={session.connection.host}
+                        username={session.connection.username || 'root'}
                       />
                     </div>
                   </TerminalSlotProvider>

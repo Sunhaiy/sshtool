@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ProcessList } from './ProcessList';
+import { ConnectingLog } from './ConnectingOverlay';
 
 interface SystemMonitorProps {
     connectionId: string;
@@ -43,9 +44,14 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
 
     if (!stats) {
         return (
-            <div className="h-full bg-transparent text-muted-foreground flex items-center justify-center text-xs font-mono uppercase tracking-wider">
-                <Activity className="w-4 h-4 mr-2 animate-spin" />
-                Connecting...
+            <div className="h-full overflow-hidden">
+                <ConnectingLog lines={[
+                    { text: '> Probing system resources...', delay: 400 },
+                    { text: '> Reading /proc/cpuinfo...', delay: 1000 },
+                    { text: '> Reading /proc/meminfo...', delay: 1800 },
+                    { text: '> Querying disk usage (df -h)...', delay: 2800 },
+                    { text: '> Scanning network interfaces...', delay: 3800 },
+                ]} />
             </div>
         );
     }

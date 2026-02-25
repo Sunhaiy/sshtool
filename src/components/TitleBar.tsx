@@ -7,7 +7,7 @@ export type WorkspaceMode = 'normal' | 'agent';
 interface SessionInfo {
   uniqueId: string;
   connection: SSHConnection;
-  status: 'connected' | 'disconnected';
+  status: 'connecting' | 'connected' | 'disconnected';
 }
 
 interface TitleBarProps {
@@ -119,7 +119,8 @@ export function TitleBar({
             >
               <div className={cn(
                 "w-1.5 h-1.5 rounded-full mr-1.5 shrink-0",
-                session.status === 'connected' ? "bg-emerald-500" : "bg-red-400/80"
+                session.status === 'connected' ? "bg-emerald-500" :
+                  session.status === 'connecting' ? "bg-yellow-500 animate-pulse" : "bg-red-400/80"
               )} />
               <span className="truncate flex-1" title={session.connection.name}>
                 {session.connection.name}

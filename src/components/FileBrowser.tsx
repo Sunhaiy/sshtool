@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { FileEntry } from '../shared/types';
+import { ConnectingLog } from './ConnectingOverlay';
 import {
   Folder, File, ArrowLeft, RefreshCw, Upload, Download, Trash2, Edit2,
   Plus, ArrowUp, FolderPlus, Star, Bookmark, X, Search, ChevronDown, ChevronUp
@@ -20,6 +21,7 @@ declare global {
 
 interface FileBrowserProps {
   connectionId: string;
+  isConnected?: boolean;
 }
 
 interface ContextMenu {
@@ -31,10 +33,11 @@ interface ContextMenu {
 type SortField = 'name' | 'size' | 'date';
 type SortOrder = 'asc' | 'desc';
 
-export function FileBrowser({ connectionId }: FileBrowserProps) {
+export function FileBrowser({ connectionId, isConnected = true }: FileBrowserProps) {
   const [currentPath, setCurrentPath] = useState('/');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [editingFile, setEditingFile] = useState<{ name: string, path: string, content: string } | null>(null);
   const [pathCache, setPathCache] = useState<Record<string, FileEntry[]>>({});
@@ -116,6 +119,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
       setFiles([]);
     } finally {
       setLoading(false);
+      setHasLoaded(true);
     }
   };
 
@@ -168,13 +172,14 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
   };
 
   useEffect(() => {
+    if (!isConnected) return; // Wait until SSH is ready
     setPathCache({});
     loadFiles('/', true);
 
     const handleClick = () => setContextMenu(null);
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
-  }, [connectionId]);
+  }, [connectionId, isConnected]);
 
   const handleNavigate = (entry: FileEntry) => {
     if (entry.type === 'd') {
@@ -584,7 +589,14 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
         onContextMenu={(e) => onContextMenu(e)}
       >
         <div className="flex flex-col min-h-full pb-2">
-          {sortedAndFilteredFiles.length === 0 && !loading ? (
+          {!hasLoaded ? (
+            <ConnectingLog lines={[
+              { text: '> Initializing SFTP subsystem...', delay: 500 },
+              { text: '> Negotiating channel...', delay: 1200 },
+              { text: '> Waiting for SSH handshake...', delay: 2200 },
+              { text: '> Opening directory /', delay: 3500 },
+            ]} />
+          ) : sortedAndFilteredFiles.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Search className="w-12 h-12 mb-4 opacity-20" />
               <p className="text-sm">暂无文件</p>

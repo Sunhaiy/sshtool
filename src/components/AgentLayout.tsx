@@ -4,15 +4,19 @@ import { useRef, useState, useEffect } from 'react';
 import { AIChatPanel, AgentMessage } from './AIChatPanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { TerminalSlotConsumer } from './TerminalSlot';
+import { TerminalConnecting } from './ConnectingOverlay';
 
 interface AgentLayoutProps {
     connectionId: string;
     messages: AgentMessage[];
     onMessagesChange: (messages: AgentMessage[]) => void;
-    isActive: boolean; // whether agent mode is currently the active layout
+    isActive: boolean;
+    sessionStatus?: 'connecting' | 'connected' | 'disconnected';
+    host?: string;
+    username?: string;
 }
 
-export function AgentLayout({ connectionId, messages, onMessagesChange, isActive }: AgentLayoutProps) {
+export function AgentLayout({ connectionId, messages, onMessagesChange, isActive, sessionStatus, host, username }: AgentLayoutProps) {
     const [chatWidth, setChatWidth] = useState(0.55); // 55% for chat
     const layoutRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef(false);
@@ -88,13 +92,14 @@ export function AgentLayout({ connectionId, messages, onMessagesChange, isActive
                 <div className="h-full bg-card/50 rounded-lg border border-border overflow-hidden flex flex-col">
                     {/* Terminal Header */}
                     <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/40 text-xs text-muted-foreground">
-                        <div className="w-2 h-2 rounded-full bg-green-500 mr-2" />
+                        <div className={`w-2 h-2 rounded-full mr-2 ${sessionStatus === 'connected' ? 'bg-green-500' : sessionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-400'}`} />
                         终端观察
                     </div>
-                    {/* TerminalSlotConsumer only mounts when Agent is the active mode,
-                        so it can claim the terminal without racing against Normal mode's consumer */}
                     <div className="flex-1 min-h-0 relative overflow-hidden">
                         {isActive && <TerminalSlotConsumer />}
+                        {sessionStatus === 'connecting' && host && username && (
+                            <TerminalConnecting host={host} username={username} />
+                        )}
                     </div>
                 </div>
             </div>
