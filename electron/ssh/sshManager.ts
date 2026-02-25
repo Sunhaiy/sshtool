@@ -409,8 +409,7 @@ export class SSHManager {
         if (!conn) throw new Error('Not connected');
 
         return new Promise((resolve, reject) => {
-            // ID, Names, Image, Status, State
-            const cmd = 'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.State}}"';
+            const cmd = 'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.State}}|{{.Ports}}|{{.Label \\"com.docker.compose.project\\"}}"';
             conn.exec(cmd, (err, stream) => {
                 if (err) return reject(err);
                 let output = '';
@@ -418,12 +417,19 @@ export class SSHManager {
                 stream.on('close', () => {
                     try {
                         const containers = output.trim().split('\n').filter(line => line.trim()).map(line => {
-                            const [id, names, image, status, state] = line.split('|');
-                            return { id, name: names, image, status, state };
+                            const parts = line.split('|');
+                            return {
+                                id: parts[0] || '',
+                                name: parts[1] || '',
+                                image: parts[2] || '',
+                                status: parts[3] || '',
+                                state: parts[4] || '',
+                                ports: parts[5] || '',
+                                composeProject: parts[6] || '',
+                            };
                         });
                         resolve(containers);
                     } catch (e) {
-                        // docker might not be installed or permission denied
                         resolve([]);
                     }
                 });
@@ -431,15 +437,16 @@ export class SSHManager {
         });
     }
 
-    async dockerAction(id: string, containerId: string, action: 'start' | 'stop' | 'restart'): Promise<void> {
+    async dockerAction(id: string, containerId: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove'): Promise<void> {
         const conn = this.connections.get(id);
         if (!conn) throw new Error('Not connected');
 
+        const cmd = action === 'remove' ? `docker rm -f ${containerId}` : `docker ${action} ${containerId}`;
         return new Promise((resolve, reject) => {
-            conn.exec(`docker ${action} ${containerId}`, (err, stream) => {
+            conn.exec(cmd, (err, stream) => {
                 if (err) return reject(err);
                 let stderr = '';
-                stream.on('data', () => { }); // must consume stdout
+                stream.on('data', () => { });
                 stream.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
                 stream.on('close', (code: any) => {
                     if (code === 0) resolve();
@@ -449,6 +456,95 @@ export class SSHManager {
         });
     }
 
+    async dockerLogs(id: string, containerId: string, lines: number = 200): Promise<string> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        return new Promise((resolve, reject) => {
+            conn.exec(`docker logs --tail ${lines} ${containerId} 2>&1`, (err, stream) => {
+                if (err) return reject(err);
+                let output = '';
+                stream.on('data', (data: any) => output += data.toString());
+                stream.on('close', () => resolve(output));
+            });
+        });
+    }
+
+    async dockerImages(id: string): Promise<any[]> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        return new Promise((resolve, reject) => {
+            conn.exec('docker images --format "{{.ID}}|{{.Repository}}|{{.Tag}}|{{.Size}}|{{.CreatedSince}}"', (err, stream) => {
+                if (err) return reject(err);
+                let output = '';
+                stream.on('data', (data: any) => output += data.toString());
+                stream.on('close', () => {
+                    try {
+                        const images = output.trim().split('\n').filter(l => l.trim()).map(line => {
+                            const [imgId, repo, tag, size, created] = line.split('|');
+                            return { id: imgId, repository: repo, tag, size, created };
+                        });
+                        resolve(images);
+                    } catch {
+                        resolve([]);
+                    }
+                });
+            });
+        });
+    }
+
+    async dockerRemoveImage(id: string, imageId: string): Promise<string> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        return new Promise((resolve, reject) => {
+            conn.exec(`docker rmi ${imageId} 2>&1`, (err, stream) => {
+                if (err) return reject(err);
+                let output = '';
+                stream.on('data', (data: any) => output += data.toString());
+                stream.on('close', (code: any) => {
+                    if (code === 0) resolve(output);
+                    else reject(new Error(output || 'Failed to remove image'));
+                });
+            });
+        });
+    }
+
+    async dockerPrune(id: string, type: 'system' | 'images' | 'volumes' | 'containers'): Promise<string> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        const cmds: Record<string, string> = {
+            system: 'docker system prune -af --volumes 2>&1',
+            images: 'docker image prune -af 2>&1',
+            volumes: 'docker volume prune -af 2>&1',
+            containers: 'docker container prune -f 2>&1',
+        };
+
+        return new Promise((resolve, reject) => {
+            conn.exec(cmds[type], (err, stream) => {
+                if (err) return reject(err);
+                let output = '';
+                stream.on('data', (data: any) => output += data.toString());
+                stream.on('close', () => resolve(output));
+            });
+        });
+    }
+
+    async dockerDiskUsage(id: string): Promise<string> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        return new Promise((resolve, reject) => {
+            conn.exec('docker system df 2>&1', (err, stream) => {
+                if (err) return reject(err);
+                let output = '';
+                stream.on('data', (data: any) => output += data.toString());
+                stream.on('close', () => resolve(output));
+            });
+        });
+    }
 
 
     private parseStats(output: string): SystemStats | null {

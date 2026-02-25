@@ -113,6 +113,25 @@ export function setupIpcHandlers() {
     return sshManager.dockerAction(id, containerId, action);
   });
 
+  ipcMain.handle('docker-logs', async (event, { id, containerId, lines }) => {
+    return sshManager.dockerLogs(id, containerId, lines);
+  });
+
+  ipcMain.handle('docker-images', async (event, id) => {
+    return sshManager.dockerImages(id);
+  });
+
+  ipcMain.handle('docker-remove-image', async (event, { id, imageId }) => {
+    return sshManager.dockerRemoveImage(id, imageId);
+  });
+
+  ipcMain.handle('docker-prune', async (event, { id, type }) => {
+    return sshManager.dockerPrune(id, type);
+  });
+
+  ipcMain.handle('docker-disk-usage', async (event, id) => {
+    return sshManager.dockerDiskUsage(id);
+  });
 
 
   // Window Controls

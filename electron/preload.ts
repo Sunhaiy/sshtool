@@ -42,7 +42,11 @@ contextBridge.exposeInMainWorld('electron', {
 
   getDockerContainers: (id: string) => ipcRenderer.invoke('docker-list', id),
   dockerAction: (id: string, containerId: string, action: string) => ipcRenderer.invoke('docker-action', { id, containerId, action }),
-
+  dockerLogs: (id: string, containerId: string, lines?: number) => ipcRenderer.invoke('docker-logs', { id, containerId, lines: lines || 200 }),
+  dockerImages: (id: string) => ipcRenderer.invoke('docker-images', id),
+  dockerRemoveImage: (id: string, imageId: string) => ipcRenderer.invoke('docker-remove-image', { id, imageId }),
+  dockerPrune: (id: string, type: string) => ipcRenderer.invoke('docker-prune', { id, type }),
+  dockerDiskUsage: (id: string) => ipcRenderer.invoke('docker-disk-usage', id),
 
 
   onSSHStatus: (callback: (event: any, payload: { id: string, status: string }) => void) => {
