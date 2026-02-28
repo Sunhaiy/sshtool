@@ -49,6 +49,8 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [modelInput, setModelInput] = useState('');          // text field in picker
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const modeMenuRef = useRef<HTMLDivElement>(null);
+    const modelMenuRef = useRef<HTMLDivElement>(null);
     const latestMessagesRef = useRef(messages);
     const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist, aiProfiles, activeProfileId } = useSettingsStore();
     const { t } = useTranslation();
@@ -58,6 +60,20 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const sessionIdRef = useRef(sessionId);
     useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+
+    // Click-outside to dismiss popover menus
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (showModeMenu && modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
+                setShowModeMenu(false);
+            }
+            if (showModelMenu && modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
+                setShowModelMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showModeMenu, showModelMenu]);
 
     // Keep refs in sync
     useEffect(() => { latestMessagesRef.current = messages; }, [messages]);
@@ -524,125 +540,127 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
             {/* Input Area */}
             <div className="border-t border-border p-3 bg-background/50">
-                {/* Mode selector bar */}
-                <div className="flex items-center gap-2 mb-2 relative">
+                {/* Mode & Model selector bar — horizontal */}
+                <div className="flex items-center gap-2 mb-2">
                     {/* Control Mode Selector */}
-                    <button
-                        onClick={() => { setShowModeMenu(!showModeMenu); setShowModelMenu(false); }}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40"
-                    >
-                        {agentControlMode === 'auto' && <><Zap className="w-3 h-3 text-green-500" />完全 AI 控制</>}
-                        {agentControlMode === 'approval' && <><Shield className="w-3 h-3 text-yellow-500" />批准模式</>}
-                        {agentControlMode === 'whitelist' && <><ShieldCheck className="w-3 h-3 text-blue-500" />白名单模式</>}
-                        <ChevronDown className="w-2.5 h-2.5" />
-                    </button>
-                    {showModeMenu && (
-                        <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 min-w-[200px]">
-                            {[
-                                { id: 'auto' as const, icon: <Zap className="w-3.5 h-3.5 text-green-500" />, label: '完全 AI 控制', desc: '所有命令自动执行' },
-                                { id: 'approval' as const, icon: <Shield className="w-3.5 h-3.5 text-yellow-500" />, label: '批准模式', desc: '每条命令需要手动批准' },
-                                { id: 'whitelist' as const, icon: <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />, label: '白名单模式', desc: '白名单内命令自动执行' },
-                            ].map(opt => (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => { setAgentControlMode(opt.id); setShowModeMenu(false); }}
-                                    className={cn(
-                                        "w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-accent transition-colors",
-                                        agentControlMode === opt.id && "bg-accent/50"
-                                    )}
-                                >
-                                    {opt.icon}
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-medium">{opt.label}</span>
-                                        <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
-                                    </div>
-                                    {agentControlMode === opt.id && <Check className="w-3 h-3 text-primary ml-auto mt-0.5" />}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* ── Model picker chip ── */}
-                <div className="flex items-center gap-2 mb-2 relative">
-                    <button
-                        onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }}
-                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40 max-w-[200px]"
-                        title={agentModel || 'Default model from settings'}
-                    >
-                        <Cpu className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">
-                            {(() => {
-                                const p = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
-                                if (agentModel) return agentModel;
-                                if (p) return p.name;
-                                return 'default';
-                            })()}
-                        </span>
-                        <ChevronDown className="w-2.5 h-2.5 flex-shrink-0 ml-0.5" />
-                    </button>
-                    {showModelMenu && (
-                        <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1.5 z-50 w-[260px] max-h-[320px] overflow-y-auto">
-                            {/* Custom model input */}
-                            <div className="px-3 pb-1.5 border-b border-border/40 mb-1">
-                                <input
-                                    value={modelInput}
-                                    onChange={e => setModelInput(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' && modelInput.trim()) {
-                                            setAgentModel(modelInput.trim());
-                                            setAgentProfileId(''); // use current active profile's API
-                                            setShowModelMenu(false);
-                                            e.preventDefault();
-                                        }
-                                    }}
-                                    placeholder="自定义模型名称… (Enter 确认)"
-                                    className="w-full px-2 py-1.5 text-[11px] bg-secondary/50 rounded border border-border/40 focus:border-primary/50 outline-none"
-                                    autoFocus
-                                />
-                            </div>
-
-                            {/* Configured profiles */}
-                            {aiProfiles.length > 0 && (
-                                <div className="px-2 py-1 text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">已配置</div>
-                            )}
-                            {aiProfiles.map(profile => {
-                                const isSelected = (agentProfileId || activeProfileId) === profile.id && !agentModel;
-                                return (
+                    <div className="relative" ref={modeMenuRef}>
+                        <button
+                            onClick={() => { setShowModeMenu(!showModeMenu); setShowModelMenu(false); }}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40"
+                        >
+                            {agentControlMode === 'auto' && <><Zap className="w-3 h-3 text-green-500" />完全 AI 控制</>}
+                            {agentControlMode === 'approval' && <><Shield className="w-3 h-3 text-yellow-500" />批准模式</>}
+                            {agentControlMode === 'whitelist' && <><ShieldCheck className="w-3 h-3 text-blue-500" />白名单模式</>}
+                            <ChevronDown className="w-2.5 h-2.5" />
+                        </button>
+                        {showModeMenu && (
+                            <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 min-w-[200px]">
+                                {[
+                                    { id: 'auto' as const, icon: <Zap className="w-3.5 h-3.5 text-green-500" />, label: '完全 AI 控制', desc: '所有命令自动执行' },
+                                    { id: 'approval' as const, icon: <Shield className="w-3.5 h-3.5 text-yellow-500" />, label: '批准模式', desc: '每条命令需要手动批准' },
+                                    { id: 'whitelist' as const, icon: <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />, label: '白名单模式', desc: '白名单内命令自动执行' },
+                                ].map(opt => (
                                     <button
-                                        key={profile.id}
-                                        onClick={() => {
-                                            setAgentProfileId(profile.id);
-                                            setAgentModel(''); // use profile's own model
-                                            setShowModelMenu(false);
-                                        }}
+                                        key={opt.id}
+                                        onClick={() => { setAgentControlMode(opt.id); setShowModeMenu(false); }}
                                         className={cn(
-                                            'w-full text-left px-3 py-2 text-[11px] hover:bg-accent transition-colors',
-                                            isSelected && 'text-primary bg-accent/40'
+                                            "w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-accent transition-colors",
+                                            agentControlMode === opt.id && "bg-accent/50"
                                         )}
                                     >
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="font-medium">{profile.name}</span>
-                                            {isSelected && <Check className="w-3 h-3 text-primary" />}
-                                            {activeProfileId === profile.id && !isSelected && (
-                                                <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">默认</span>
-                                            )}
+                                        {opt.icon}
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-medium">{opt.label}</span>
+                                            <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
                                         </div>
-                                        <div className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                            {AI_PROVIDER_CONFIGS[profile.provider]?.displayName} · {profile.model || AI_PROVIDER_CONFIGS[profile.provider]?.defaultModel}
-                                        </div>
+                                        {agentControlMode === opt.id && <Check className="w-3 h-3 text-primary ml-auto mt-0.5" />}
                                     </button>
-                                );
-                            })}
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
-                            {/* Empty state */}
-                            {aiProfiles.length === 0 && (
-                                <div className="px-3 py-3 text-[11px] text-muted-foreground/50 text-center">
-                                    请先在设置中添加 AI 配置
+                    {/* ── Model picker chip ── */}
+                    <div className="relative" ref={modelMenuRef}>
+                        <button
+                            onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40 max-w-[200px]"
+                            title={agentModel || 'Default model from settings'}
+                        >
+                            <Cpu className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">
+                                {(() => {
+                                    const p = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
+                                    if (agentModel) return agentModel;
+                                    if (p) return p.name;
+                                    return 'default';
+                                })()}
+                            </span>
+                            <ChevronDown className="w-2.5 h-2.5 flex-shrink-0 ml-0.5" />
+                        </button>
+                        {showModelMenu && (
+                            <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1.5 z-50 w-[260px] max-h-[320px] overflow-y-auto">
+                                {/* Custom model input */}
+                                <div className="px-3 pb-1.5 border-b border-border/40 mb-1">
+                                    <input
+                                        value={modelInput}
+                                        onChange={e => setModelInput(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && modelInput.trim()) {
+                                                setAgentModel(modelInput.trim());
+                                                setAgentProfileId(''); // use current active profile's API
+                                                setShowModelMenu(false);
+                                                e.preventDefault();
+                                            }
+                                        }}
+                                        placeholder="自定义模型名称… (Enter 确认)"
+                                        className="w-full px-2 py-1.5 text-[11px] bg-secondary/50 rounded border border-border/40 focus:border-primary/50 outline-none"
+                                        autoFocus
+                                    />
                                 </div>
-                            )}
-                        </div>
-                    )}
+
+                                {/* Configured profiles */}
+                                {aiProfiles.length > 0 && (
+                                    <div className="px-2 py-1 text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">已配置</div>
+                                )}
+                                {aiProfiles.map(profile => {
+                                    const isSelected = (agentProfileId || activeProfileId) === profile.id && !agentModel;
+                                    return (
+                                        <button
+                                            key={profile.id}
+                                            onClick={() => {
+                                                setAgentProfileId(profile.id);
+                                                setAgentModel(''); // use profile's own model
+                                                setShowModelMenu(false);
+                                            }}
+                                            className={cn(
+                                                'w-full text-left px-3 py-2 text-[11px] hover:bg-accent transition-colors',
+                                                isSelected && 'text-primary bg-accent/40'
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-medium">{profile.name}</span>
+                                                {isSelected && <Check className="w-3 h-3 text-primary" />}
+                                                {activeProfileId === profile.id && !isSelected && (
+                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">默认</span>
+                                                )}
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                                                {AI_PROVIDER_CONFIGS[profile.provider]?.displayName} · {profile.model || AI_PROVIDER_CONFIGS[profile.provider]?.defaultModel}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+
+                                {/* Empty state */}
+                                {aiProfiles.length === 0 && (
+                                    <div className="px-3 py-3 text-[11px] text-muted-foreground/50 text-center">
+                                        请先在设置中添加 AI 配置
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="relative">

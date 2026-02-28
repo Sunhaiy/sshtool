@@ -511,31 +511,28 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
                 </div>
             )}
 
-            <div className="flex-1 overflow-y-auto">
-                {/* Table Header */}
-                <div className="grid grid-cols-[1fr_80px_80px_80px_40px] gap-2 px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/60 border-b border-border/30 sticky top-0 bg-background/80 backdrop-blur-sm">
-                    <span>仓库:标签</span>
-                    <span>大小</span>
-                    <span>创建时间</span>
-                    <span>ID</span>
-                    <span></span>
-                </div>
-
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {images.map(img => (
-                    <div key={img.id} className="grid grid-cols-[1fr_80px_80px_80px_40px] gap-2 px-3 py-2 text-[11px] border-b border-border/20 hover:bg-muted/30 items-center">
-                        <span className="font-mono truncate text-foreground/80">
-                            {img.repository}<span className="text-muted-foreground">:{img.tag}</span>
-                        </span>
-                        <span className="text-muted-foreground font-mono">{img.size}</span>
-                        <span className="text-muted-foreground truncate">{img.created}</span>
-                        <span className="text-muted-foreground/50 font-mono">{img.id.substring(0, 12)}</span>
-                        <button
-                            onClick={() => handleDelete(img.id)}
-                            disabled={!!deleting}
-                            className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded disabled:opacity-20 transition-colors"
-                        >
-                            <Trash2 className={`w-3 h-3 ${deleting === img.id ? 'animate-spin' : ''}`} />
-                        </button>
+                    <div key={img.id} className="bg-card/50 border border-border rounded-lg p-3 hover:border-primary/30 transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                                <div className="font-mono text-xs truncate text-foreground/90">
+                                    {img.repository}<span className="text-muted-foreground">:{img.tag}</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] text-muted-foreground/60">
+                                    <span className="font-mono">{img.size}</span>
+                                    <span>{img.created}</span>
+                                    <span className="font-mono">{img.id.substring(0, 12)}</span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => handleDelete(img.id)}
+                                disabled={!!deleting}
+                                className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded disabled:opacity-20 transition-colors shrink-0"
+                            >
+                                <Trash2 className={`w-3.5 h-3.5 ${deleting === img.id ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
                     </div>
                 ))}
 
@@ -589,10 +586,10 @@ function PruneTab({ connectionId }: { connectionId: string }) {
     };
 
     const pruneActions = [
-        { type: 'containers', label: '清理已停止的容器', icon: Container, color: 'text-orange-400 hover:bg-orange-500/10', desc: 'docker container prune' },
-        { type: 'images', label: '清理无用镜像', icon: Package, color: 'text-blue-400 hover:bg-blue-500/10', desc: 'docker image prune -a' },
-        { type: 'volumes', label: '清理悬空数据卷', icon: HardDrive, color: 'text-purple-400 hover:bg-purple-500/10', desc: 'docker volume prune' },
-        { type: 'system', label: '全面清理 (System Prune)', icon: Trash2, color: 'text-red-400 hover:bg-red-500/10', desc: 'docker system prune -af --volumes' },
+        { type: 'containers', label: '清理已停止的容器', icon: Container, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker container prune' },
+        { type: 'images', label: '清理无用镜像', icon: Package, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker image prune -a' },
+        { type: 'volumes', label: '清理悬空数据卷', icon: HardDrive, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker volume prune' },
+        { type: 'system', label: '全面清理 (System Prune)', icon: Trash2, color: 'text-destructive hover:bg-destructive/10', desc: 'docker system prune -af --volumes' },
     ];
 
     return (
@@ -622,7 +619,7 @@ function PruneTab({ connectionId }: { connectionId: string }) {
                         disabled={!!pruning}
                         className={`w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-card/50 transition-all ${action.color} disabled:opacity-40`}
                     >
-                        <action.icon className={`w-5 h-5 shrink-0 ${pruning === action.type ? 'animate-spin' : ''}`} />
+                        <action.icon className={`w-5 h-5 shrink-0 ${pruning === action.type ? 'animate-pulse' : ''}`} />
                         <div className="text-left min-w-0">
                             <div className="text-xs font-medium">{action.label}</div>
                             <div className="text-[10px] text-muted-foreground/60 font-mono">{action.desc}</div>
