@@ -78,7 +78,8 @@ export class SSHManager {
                 this.cleanup(sessionId);
                 reject(err);
             });
-            conn.on('keyboard-interactive', (_name, _instructions, _instructionsLang, _prompts, finish) => {
+            conn.on('keyboard-interactive', (_name, _instructions, _instructionsLang, prompts, finish) => {
+                console.log(`[SSH] keyboard-interactive triggered for ${connection.host}, prompts=${JSON.stringify(prompts)}`);
                 finish([connection.password || '']);
             });
             conn.on('close', () => this.cleanup(sessionId));
@@ -385,7 +386,10 @@ export class SSHManager {
             }, 5000); // 5s max per collection cycle
 
             conn.exec(cmd, (err, s) => {
-                if (err) { clearTimeout(timeout); pending = false; return; }
+                if (err) {
+                    console.error(`[Monitor] exec error for ${id}:`, err.message);
+                    clearTimeout(timeout); pending = false; return;
+                }
                 stream = s;
                 let output = '';
                 stream.on('data', (data: any) => output += data.toString());
@@ -681,9 +685,11 @@ export class SSHManager {
             let totalRx = 0;
             let totalTx = 0;
             netLines.forEach((line: string) => {
-                const parts = line.split(':')[1].trim().split(/\s+/);
-                totalRx += parseInt(parts[0]);
-                totalTx += parseInt(parts[8]);
+                try {
+                    const parts = line.split(':')[1].trim().split(/\s+/);
+                    if (parts.length > 1) totalRx += parseInt(parts[0]) || 0;
+                    if (parts.length > 8) totalTx += parseInt(parts[8]) || 0;
+                } catch (_) { /* skip malformed line */ }
             });
 
             const now = Date.now();
@@ -748,8 +754,8 @@ export class SSHManager {
                 },
                 disks: disks
             };
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            console.error('[Monitor] parseStats failed:', e?.message, e?.stack?.split('\n')[1]);
             return null;
         }
     }

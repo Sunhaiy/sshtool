@@ -57,7 +57,7 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
     }
 
     return (
-        <div className="h-full bg-transparent text-foreground p-4 overflow-y-auto space-y-4 font-sans border-l border-border/50 scrollbar-hide">
+        <div className="h-full bg-transparent text-foreground p-3 overflow-y-auto space-y-3 font-sans border-l border-border/50 scrollbar-hide">
 
             {/* Header / OS Info - Card Style */}
             <div className="bg-card/40 border border-border/50 rounded-lg p-3 flex items-center justify-between shadow-sm backdrop-blur-md">
@@ -71,7 +71,7 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
             </div>
 
             {/* Resources Grid */}
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-3">
 
                 {/* CPU Card */}
                 <div className="bg-card/40 border border-border/50 rounded-lg p-4 space-y-3 shadow-sm hover:border-emerald-500/30 transition-colors backdrop-blur-md">
@@ -90,9 +90,9 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
                         />
                     </div>
 
-                    <div className="grid grid-cols-8 gap-1 pt-1">
+                    <div className="grid gap-1 pt-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(18px, 1fr))' }}>
                         {stats.cpu.cores.map((core, i) => (
-                            <div key={i} className="h-8 bg-secondary/20 rounded-sm relative overflow-hidden group" title={`Core ${i}: ${core.usage}%`}>
+                            <div key={i} className="h-7 bg-secondary/20 rounded-sm relative overflow-hidden" title={`Core ${i}: ${core.usage}%`}>
                                 <div
                                     className="absolute bottom-0 left-0 w-full bg-emerald-500/30 transition-all duration-300"
                                     style={{ height: `${core.usage}%` }}
@@ -142,15 +142,13 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
 
                 {/* Network Card */}
                 <div className="bg-card/40 border border-border/50 rounded-lg p-4 space-y-3 shadow-sm hover:border-blue-500/30 transition-colors backdrop-blur-md">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground uppercase tracking-wider font-semibold border-b border-border/30 pb-2">
-                        <div className="flex items-center gap-1.5 text-blue-400">
-                            <Network className="w-4 h-4" />
-                            <span>Network</span>
-                        </div>
-                        <div className="flex gap-3 font-mono text-[10px]">
-                            <span className="text-blue-400">↓ {(stats.network.downSpeed / 1024).toFixed(1)} KB/s</span>
-                            <span className="text-blue-300/70">↑ {(stats.network.upSpeed / 1024).toFixed(1)} KB/s</span>
-                        </div>
+                    <div className="flex items-center gap-1.5 text-xs text-blue-400 uppercase tracking-wider font-semibold">
+                        <Network className="w-4 h-4" />
+                        <span>Network</span>
+                    </div>
+                    <div className="flex gap-3 font-mono text-[10px] pt-0.5">
+                        <span className="text-blue-400">↓ {(stats.network.downSpeed / 1024).toFixed(1)} KB/s</span>
+                        <span className="text-blue-300/70">↑ {(stats.network.upSpeed / 1024).toFixed(1)} KB/s</span>
                     </div>
 
                     <div className="h-24 w-full -mx-1 pt-2">

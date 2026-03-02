@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SSHConnection } from '../shared/types';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { Key, Lock, Server, GitMerge, ChevronDown, FolderOpen } from 'lucide-react';
+import { Key, Lock, Server, GitMerge, ChevronDown, FolderOpen, Eye, EyeOff } from 'lucide-react';
 
 interface ConnectionFormProps {
     initialData?: Partial<SSHConnection>;
@@ -11,6 +11,7 @@ interface ConnectionFormProps {
 }
 
 export function ConnectionForm({ initialData, onSave, onCancel }: ConnectionFormProps) {
+    const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState<Partial<SSHConnection>>({
         name: '',
         host: '',
@@ -116,12 +117,23 @@ export function ConnectionForm({ initialData, onSave, onCancel }: ConnectionForm
             {formData.authType === 'password' ? (
                 <div className={groupCls}>
                     <label className={labelCls}>密码</label>
-                    <Input
-                        type="password"
-                        value={formData.password}
-                        onChange={e => set({ password: e.target.value })}
-                        placeholder="••••••••"
-                    />
+                    <div className="flex gap-1.5">
+                        <Input
+                            type={showPassword ? 'text' : 'password'}
+                            value={formData.password}
+                            onChange={e => set({ password: e.target.value })}
+                            placeholder="••••••••"
+                            className="flex-1"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(v => !v)}
+                            className="px-2 py-1 rounded-md bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors border border-border"
+                            title={showPassword ? '隐藏密码' : '显示密码'}
+                        >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div className="space-y-3">

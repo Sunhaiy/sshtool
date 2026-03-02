@@ -101,7 +101,7 @@
     /* Let electron handle background */
     @apply text-foreground text-body;
     /* Apply Hoppscotch 12px body size */
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--font-ui, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif);
   }
 
   #root {

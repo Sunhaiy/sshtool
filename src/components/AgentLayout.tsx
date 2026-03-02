@@ -33,7 +33,7 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
     const [chatWidth, setChatWidth] = useState(0.55); // 55% for chat
     const layoutRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef(false);
-    const [sidebarWidth, setSidebarWidth] = useState(180); // px, 140-320
+    const [sidebarWidth, setSidebarWidth] = useState(260); // px, 180-420
     const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>('chat');
     const { t } = useTranslation();
 
@@ -106,10 +106,10 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
         const handleMouseMove = (e: MouseEvent) => {
             if (!layoutRef.current) return;
             const bounds = layoutRef.current.getBoundingClientRect();
-            // offset by icon rail width (~44px)
-            setSidebarWidth(Math.max(140, Math.min(320, e.clientX - bounds.left - 44)));
+            setSidebarWidth(Math.max(250, Math.min(420, e.clientX - bounds.left - 44)));
         };
         const handleMouseUp = () => {
+            window.dispatchEvent(new Event('resize'));
             document.body.style.cursor = 'default';
             document.body.style.userSelect = 'auto';
             document.removeEventListener('mousemove', handleMouseMove);
@@ -170,7 +170,7 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
                                 onSelectSession={handleSelectSession}
                                 onNewSession={handleNewSession}
                                 refreshTrigger={sidebarRefresh}
-                                style={{ width: sidebarWidth, minWidth: 140, maxWidth: 320 }}
+                                style={{ width: sidebarWidth, minWidth: 180, maxWidth: 420 }}
                             />
                             <div
                                 className="w-1 cursor-col-resize hover:bg-primary/40 bg-border/40 transition-colors flex-shrink-0"
@@ -182,7 +182,7 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
                 {/* Sidebar panels — shared instances via PanelSlotConsumer */}
                 {sidebarPanel !== 'chat' && (
                     <>
-                        <div className="h-full overflow-hidden flex flex-col border-r border-border/40" style={{ width: sidebarWidth, minWidth: 140, maxWidth: 320 }}>
+                        <div className="h-full overflow-hidden flex flex-col border-r border-border/40" style={{ width: sidebarWidth, minWidth: 260, maxWidth: 420 }}>
                             <PanelSlotConsumer panel={sidebarPanel as PanelName} active={isActive} />
                         </div>
                         <div
