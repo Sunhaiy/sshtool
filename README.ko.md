@@ -1,7 +1,7 @@
 <div align="center">
 
-# 🚀 Zangqing (藏青) - 차세대 스마트 SSH & Docker 매니저
-*Electron 및 React로 구축된 모던하고 AI가 탑재된 경량 크로스 플랫폼 SSH 터미널입니다.*
+# 🚀 Zangqing (藏青) - 모던 SSH 클라이언트에서 기대하는 모든 것
+*SSH 연결을 단순하게 만드는 모든 것.*
 
 [🇬🇧 English](./README.md) | [🇨🇳 简体中文](./README.zh-CN.md) | [🇯🇵 日本語](./README.ja.md) | [🇰🇷 한국어](./README.ko.md)
 

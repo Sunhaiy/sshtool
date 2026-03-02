@@ -1,7 +1,7 @@
 <div align="center">
 
-# 🚀 Zangqing - Next-Gen Smart SSH & Docker Manager
-*A modern, AI-powered lightweight cross-platform SSH terminal built with Electron & React.*
+# 🚀 Zangqing - All you expect from a modern SSH client
+*Everything that makes SSH simple.*
 
 [🇬🇧 English](./README.md) | [🇨🇳 简体中文](./README.zh-CN.md) | [🇯🇵 日本語](./README.ja.md) | [🇰🇷 한국어](./README.ko.md)
 

@@ -1,7 +1,7 @@
 <div align="center">
 
-# 🚀 Zangqing (藏青) - 次世代智能 SSH 与 Docker 管理器
-*基于 Electron 和 React 构建的现代化、AI 驱动的轻量级跨平台 SSH 终端。*
+# 🚀 Zangqing (藏青) - 你对现代ssh客户端的所有期待
+*让ssh连接变得简单的一切。*
 
 [🇬🇧 English](./README.md) | [🇨🇳 简体中文](./README.zh-CN.md) | [🇯🇵 日本語](./README.ja.md) | [🇰🇷 한국어](./README.ko.md)
 
