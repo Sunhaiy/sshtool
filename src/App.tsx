@@ -16,6 +16,7 @@ import { PanelSlotProvider, PanelSlotConsumer } from './components/PanelSlot';
 import { Modal } from './components/ui/modal';
 import { ConnectionForm } from './components/ConnectionForm';
 import { TerminalConnecting } from './components/ConnectingOverlay';
+import { ThemeBackground } from './components/ThemeBackground';
 
 interface AppSession {
   uniqueId: string;
@@ -157,7 +158,8 @@ function App() {
 
   return (
     <>
-      <div className="h-screen w-screen flex flex-col text-foreground overflow-hidden border border-border bg-transparent">
+      <div className="h-screen w-screen flex flex-col text-foreground overflow-hidden border border-border bg-transparent relative">
+        <ThemeBackground />
         <TitleBar
           onSettings={() => setPage('settings')}
           onHome={() => setPage('connections')}
@@ -226,7 +228,7 @@ function App() {
                   style={{
                     visibility: session.uniqueId === activeSessionId ? 'visible' : 'hidden',
                     zIndex: session.uniqueId === activeSessionId ? 10 : 0,
-                    background: 'hsl(var(--background))'
+                    background: 'transparent'
                   }}
                 >
                   {/* TerminalSlotProvider wraps both layouts so the single TerminalView
