@@ -1,8 +1,8 @@
 // AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Circle, Target } from 'lucide-react';
 import { aiService } from '../services/aiService';
-import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
+import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS, PlanState, PlanStep } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
@@ -51,16 +51,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [modelInput, setModelInput] = useState('');          // text field in picker
     // ── Plan Mode state ───────────────────────────────────────────────────────
     const [planMode, setPlanMode] = useState(false);
-    const [currentPlan, setCurrentPlan] = useState<{ goal: string; steps: string[] } | null>(null);
-    const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'waiting' | 'executing' | 'done'>('idle');
-    const [currentStep, setCurrentStep] = useState(-1);
-    const [toolCallCount, setToolCallCount] = useState(0);
-    const [budgetPaused, setBudgetPaused] = useState(false);
-    const [pendingResumeMessages, setPendingResumeMessages] = useState<AgentMessage[] | null>(null);
-    const BUDGET_PER_STEP = 5;
-    const toolCallCountRef = useRef(0);
-    const currentPlanRef = useRef<{ goal: string; steps: string[] } | null>(null);
-    const currentStepRef = useRef(-1);
+    const [planState, setPlanState] = useState<PlanState | null>(null);
+    const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'executing' | 'done' | 'stopped' | 'paused'>('idle');
+    const planStateRef = useRef<PlanState | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -341,15 +334,6 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         while (true) {
             if (!isLoadingRef.current) break; // stopped by user
 
-            // ── Budget check (plan mode) ──
-            if (planMode && toolCallCountRef.current >= BUDGET_PER_STEP) {
-                setBudgetPaused(true);
-                setPendingResumeMessages(loopMessages);
-                setIsLoading(false);
-                isLoadingRef.current = false;
-                return;
-            }
-
             // Show thinking indicator
             const thinkingId = `thinking-${Date.now()}`;
             const thinkingMsg: AgentMessage = {
@@ -446,25 +430,6 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 }
 
                 // Execute immediately
-                // Increment budget counter in plan mode and advance step tracker
-                if (planMode) {
-                    toolCallCountRef.current += 1;
-                    setToolCallCount(toolCallCountRef.current);
-                    // Distribute steps evenly across tool calls:
-                    // Each step gets (total_budget / step_count) calls
-                    const plan = currentPlanRef.current;
-                    if (plan && plan.steps.length > 0) {
-                        const callsPerStep = Math.max(1, Math.ceil(BUDGET_PER_STEP / plan.steps.length));
-                        const stepIdx = Math.min(
-                            Math.floor((toolCallCountRef.current - 1) / callsPerStep),
-                            plan.steps.length - 1
-                        );
-                        if (stepIdx !== currentStepRef.current) {
-                            currentStepRef.current = stepIdx;
-                            setCurrentStep(stepIdx);
-                        }
-                    }
-                }
                 const result = await execCommand(execCmd);
 
                 // Update assistant message status to executed
@@ -566,30 +531,235 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         }
     };
 
-    // ── Generate a plan from user input (plan mode) ───────────────────────────
-    // Returns the parsed plan, or null on failure.
-    const generatePlan = async (userInput: string): Promise<{ goal: string; steps: string[] } | null> => {
-        setPlanStatus('generating');
-        const selectedProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+    // ── Plan Mode v2: Planner / Executor / Assessor / Replanner ─────────────
+    const getSelectedProfile = () => aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+
+    const callPlanner = async (goal: string): Promise<PlanState | null> => {
         try {
             const response = await aiService.completeWithTools({
                 messages: [
-                    { role: 'system', content: AI_SYSTEM_PROMPTS.agentPlan },
-                    { role: 'user', content: userInput },
+                    { role: 'system', content: AI_SYSTEM_PROMPTS.planner },
+                    { role: 'user', content: goal },
                 ],
                 tools: [],
                 temperature: 0.3,
                 overrideModel: agentModel || undefined,
-                overrideProfile: selectedProfile || undefined,
+                overrideProfile: getSelectedProfile() || undefined,
             });
-            // Strip markdown code fences if present
             const raw = (response.content || '').trim().replace(/^```[a-z]*\n?|```$/g, '').trim();
-            const plan = JSON.parse(raw) as { goal: string; steps: string[] };
-            if (!plan.goal || !Array.isArray(plan.steps) || plan.steps.length === 0) throw new Error('invalid plan');
-            return plan;
+            const state = JSON.parse(raw) as PlanState;
+            if (!state.global_goal || !Array.isArray(state.plan) || state.plan.length === 0) throw new Error('invalid plan');
+            return state;
         } catch {
             return null;
         }
+    };
+
+    const callExecutor = async (state: PlanState, step: PlanStep): Promise<string> => {
+        const userContent = `全局目标：${state.global_goal}\n已知信息：${state.scratchpad || '无'}\n当前子任务：${step.description}`;
+        try {
+            const response = await aiService.completeWithTools({
+                messages: [
+                    { role: 'system', content: AI_SYSTEM_PROMPTS.executor },
+                    { role: 'user', content: userContent },
+                ],
+                tools: [],
+                temperature: 0.2,
+                overrideModel: agentModel || undefined,
+                overrideProfile: getSelectedProfile() || undefined,
+            });
+            // Strip any accidental markdown backticks
+            return (response.content || '').trim().replace(/^`{1,3}(?:bash|sh)?\n?|`{1,3}$/g, '').trim();
+        } catch {
+            return `echo "执行器生成命令失败: ${step.description}"`;
+        }
+    };
+
+    const callAssessor = async (
+        step: PlanStep,
+        result: { stdout: string; stderr: string; exitCode: number }
+    ): Promise<{ success: boolean; note: string; scratchpad_update?: string }> => {
+        const userContent = `子任务：${step.description}
+执行命令：${step.command || ''}
+退出码：${result.exitCode}
+stdout（前2000字）：${result.stdout.slice(0, 2000)}
+stderr（前1000字）：${result.stderr.slice(0, 1000)}`;
+        try {
+            const response = await aiService.completeWithTools({
+                messages: [
+                    { role: 'system', content: AI_SYSTEM_PROMPTS.assessor },
+                    { role: 'user', content: userContent },
+                ],
+                tools: [],
+                temperature: 0.1,
+                overrideModel: agentModel || undefined,
+                overrideProfile: getSelectedProfile() || undefined,
+            });
+            const raw = (response.content || '').trim().replace(/^```[a-z]*\n?|```$/g, '').trim();
+            return JSON.parse(raw);
+        } catch {
+            // Fallback: trust exit code
+            return { success: result.exitCode === 0, note: result.exitCode === 0 ? '命令执行成功' : `退出码 ${result.exitCode}` };
+        }
+    };
+
+    const callReplanner = async (state: PlanState, failedStep: PlanStep, errorOutput: string): Promise<PlanState | null> => {
+        const userContent = `当前任务状态：\n${JSON.stringify(state, null, 2)}\n\n失败步骤：${failedStep.description}\n错误输出：${errorOutput.slice(0, 1000)}`;
+        try {
+            const response = await aiService.completeWithTools({
+                messages: [
+                    { role: 'system', content: AI_SYSTEM_PROMPTS.replanner },
+                    { role: 'user', content: userContent },
+                ],
+                tools: [],
+                temperature: 0.4,
+                overrideModel: agentModel || undefined,
+                overrideProfile: getSelectedProfile() || undefined,
+            });
+            const raw = (response.content || '').trim().replace(/^```[a-z]*\n?|```$/g, '').trim();
+            const newState = JSON.parse(raw) as PlanState;
+            if (!newState.global_goal || !Array.isArray(newState.plan)) throw new Error('invalid replan');
+            return newState;
+        } catch {
+            return null;
+        }
+    };
+
+    const runPlanLoop = async (initialState: PlanState): Promise<'done' | 'stopped' | 'paused'> => {
+        const MAX_REPLAN = 3;
+        let state = { ...initialState, plan: initialState.plan.map(s => ({ ...s })) };
+        let replanCount = 0;
+        // Start with current chat messages so plan steps appear inline
+        let loopMessages = [...latestMessagesRef.current];
+
+        const syncState = (s: PlanState) => {
+            const snapshot = { ...s, plan: s.plan.map(p => ({ ...p })) };
+            planStateRef.current = snapshot;
+            setPlanState(snapshot);
+        };
+
+        while (isLoadingRef.current) {
+            const step = state.plan.find(s => s.status === 'pending');
+            if (!step) break;
+
+            // 1. Mark in_progress
+            step.status = 'in_progress';
+            syncState(state);
+
+            // 2. Executor generates command
+            const command = await callExecutor(state, step);
+
+            // 3. Detect __ASK_USER__ signal — pause and ask user
+            if (command.startsWith('__ASK_USER__:')) {
+                const question = command.slice('__ASK_USER__:'.length).trim();
+                const askMsg: AgentMessage = {
+                    id: `plan-ask-${Date.now()}`,
+                    role: 'assistant',
+                    content: question,
+                    timestamp: Date.now(),
+                };
+                loopMessages = [...loopMessages, askMsg];
+                onMessagesChange(loopMessages);
+                // Leave the step as in_progress so resume knows what to continue from
+                syncState(state);
+                return 'paused';
+            }
+
+            step.command = command;
+            syncState(state);
+
+            // 4. Inject tool-call message into chat (like runAgentLoop does)
+            const callMsgId = `plan-call-${Date.now()}`;
+            const callMsg: AgentMessage = {
+                id: callMsgId,
+                role: 'assistant',
+                content: step.description,
+                timestamp: Date.now(),
+                toolCall: { name: 'execute_ssh_command', command, status: 'pending' },
+            };
+            loopMessages = [...loopMessages, callMsg];
+            onMessagesChange(loopMessages);
+
+            // 5. Execute SSH command
+            let result: { stdout: string; stderr: string; exitCode: number };
+            try {
+                result = await execCommand(command);
+            } catch (err: any) {
+                step.status = 'failed';
+                step.error = `SSH 执行失败: ${err?.message || err}`;
+                loopMessages = loopMessages.map(m =>
+                    m.id === callMsgId ? { ...m, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m
+                );
+                const errResultMsg: AgentMessage = {
+                    id: `plan-result-${Date.now()}`,
+                    role: 'tool',
+                    content: step.error,
+                    timestamp: Date.now(),
+                    toolCall: { name: 'execute_ssh_command', command, status: 'executed' },
+                    isError: true,
+                };
+                loopMessages = [...loopMessages, errResultMsg];
+                onMessagesChange(loopMessages);
+                syncState(state);
+                break;
+            }
+
+            // 6. Update call message to 'executed' + inject result
+            loopMessages = loopMessages.map(m =>
+                m.id === callMsgId ? { ...m, toolCall: { ...m.toolCall!, status: 'executed' as const } } : m
+            );
+            const resultContent = [result.stdout, result.stderr].filter(Boolean).join('\n').trim() || '(无输出)';
+            const resultMsg: AgentMessage = {
+                id: `plan-result-${Date.now()}`,
+                role: 'tool',
+                content: resultContent,
+                timestamp: Date.now(),
+                toolCall: { name: 'execute_ssh_command', command, status: 'executed' },
+            };
+            loopMessages = [...loopMessages, resultMsg];
+            onMessagesChange(loopMessages);
+
+            // 7. Assessor evaluates result
+            const assessment = await callAssessor(step, result);
+
+            if (assessment.success) {
+                step.status = 'completed';
+                step.result = assessment.note;
+                if (assessment.scratchpad_update) {
+                    state.scratchpad = [state.scratchpad, assessment.scratchpad_update].filter(Boolean).join('\n');
+                }
+                replanCount = 0;
+            } else {
+                step.status = 'failed';
+                step.error = assessment.note;
+                replanCount++;
+
+                if (replanCount > MAX_REPLAN) {
+                    syncState(state);
+                    break;
+                }
+
+                // Trigger Re-planner — inject a note into the chat
+                const replanNoteMsg: AgentMessage = {
+                    id: `plan-replan-${Date.now()}`,
+                    role: 'assistant',
+                    content: `步骤失败，正在重新规划：${assessment.note}`,
+                    timestamp: Date.now(),
+                };
+                loopMessages = [...loopMessages, replanNoteMsg];
+                onMessagesChange(loopMessages);
+
+                const newState = await callReplanner(state, step, result.stderr || result.stdout);
+                if (!newState) { syncState(state); break; }
+                state = { ...newState, plan: newState.plan.map(p => ({ ...p })) };
+            }
+
+            syncState(state);
+        }
+
+        // Determine why we exited: naturally done, or user stopped
+        const hasPending = state.plan.some(s => s.status === 'pending' || s.status === 'in_progress');
+        return hasPending ? 'stopped' : 'done';
     };
 
 
@@ -618,39 +788,49 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         onMessagesChange(updatedMessages);
         setInput('');
 
-        // Reset plan state for new message
-        setCurrentPlan(null);
-        currentPlanRef.current = null;
-        setPlanStatus('idle');
-        setCurrentStep(-1);
-        currentStepRef.current = -1;
-        toolCallCountRef.current = 0;
-        setToolCallCount(0);
-        setBudgetPaused(false);
-        setPendingResumeMessages(null);
+        // Reset plan state for new message (but NOT when resuming a paused plan)
+        const isResuming = planMode && planStatus === 'paused' && planStateRef.current !== null;
+        if (!isResuming) {
+            setPlanState(null);
+            planStateRef.current = null;
+            setPlanStatus('idle');
+        }
 
         if (planMode) {
             // Plan mode: generate plan, then auto-execute immediately
             setIsLoading(true);
             isLoadingRef.current = true;
             try {
-                const plan = await generatePlan(userMsg.content);
-                if (plan) {
-                    // Plan generated — start executing right away
-                    setCurrentPlan(plan);
-                    currentPlanRef.current = plan;
+                let result: 'done' | 'stopped' | 'paused';
+
+                if (isResuming) {
+                    // Resume a paused plan: inject user's answer into scratchpad
+                    const state = { ...planStateRef.current!, plan: planStateRef.current!.plan.map(s => ({ ...s })) };
+                    const askStep = state.plan.find(s => s.status === 'in_progress');
+                    if (askStep) {
+                        askStep.status = 'completed';
+                        askStep.result = `用户提供: ${userMsg.content}`;
+                    }
+                    state.scratchpad = [state.scratchpad, `用户提供: ${userMsg.content}`].filter(Boolean).join('\n');
+                    planStateRef.current = state;
+                    setPlanState(state);
                     setPlanStatus('executing');
-                    setCurrentStep(0);
-                    currentStepRef.current = 0;
-                    toolCallCountRef.current = 0;
-                    setToolCallCount(0);
-                    await runAgentLoop(updatedMessages);
-                    setPlanStatus('done');
+                    result = await runPlanLoop(state);
                 } else {
-                    // Plan generation failed — fall back to direct execution
-                    setPlanStatus('idle');
-                    await runAgentLoop(updatedMessages);
+                    setPlanStatus('generating');
+                    const state = await callPlanner(userMsg.content);
+                    if (state) {
+                        setPlanStatus('executing');
+                        result = await runPlanLoop(state);
+                    } else {
+                        // Planner failed — fall back to direct agent loop
+                        setPlanStatus('idle');
+                        await runAgentLoop(updatedMessages);
+                        return;
+                    }
                 }
+
+                setPlanStatus(result); // 'done' | 'stopped' | 'paused'
             } finally {
                 setIsLoading(false);
                 isLoadingRef.current = false;
@@ -735,75 +915,161 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* ── Plan Card (plan mode) ────────────────────────────────────── */}
-            {planMode && (planStatus === 'generating' || planStatus === 'executing') && (
+            {/* ── Plan Card (plan mode v2) ─────────────────────────────────── */}
+            {planMode && planStatus !== 'idle' && (
                 <div className="border-t border-border mx-3 mt-0 mb-0">
-                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 mt-2 mb-1 space-y-2">
-                        {/* Header */}
-                        <div className="flex items-center gap-2">
-                            <ListChecks className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-                            <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">执行计划</span>
+                    <div
+                        className="mt-2 mb-1 rounded-xl border border-border/20 bg-card/30 overflow-hidden"
+                        style={{ animation: 'agentSlideInUp 0.22s ease-out' }}
+                    >
+                        {/* ── Header bar ── */}
+                        <div className={cn(
+                            "flex items-center gap-2 px-3 py-2 border-b border-border/15",
+                            planStatus === 'paused' ? "bg-yellow-500/8" : "bg-secondary/10",
+                        )}>
+                            <ListChecks className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
+                            <span className="text-[11px] font-semibold text-foreground/60 tracking-wide">执行计划</span>
                             {planStatus === 'generating' && (
-                                <Loader2 className="w-3 h-3 text-blue-400 animate-spin ml-auto" />
+                                <Loader2 className="w-3 h-3 text-primary/50 animate-spin ml-auto" />
                             )}
-                            {planStatus === 'executing' && currentPlan && (
-                                <span className="ml-auto text-[10px] text-muted-foreground font-mono">
-                                    {Math.min(currentStep + 1, currentPlan.steps.length)}/{currentPlan.steps.length} 步
+                            {planState && planStatus === 'executing' && (
+                                <span className="ml-auto text-[10px] text-muted-foreground/60 font-mono tabular-nums">
+                                    {planState.plan.filter(s => s.status === 'completed' || s.status === 'skipped').length}
+                                    <span className="opacity-40">/</span>
+                                    {planState.plan.length}
+                                </span>
+                            )}
+                            {planStatus === 'done' && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-green-400 ml-auto" />
+                            )}
+                            {planStatus === 'stopped' && (
+                                <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                                    <Square className="w-2.5 h-2.5" />
+                                    已停止
+                                </span>
+                            )}
+                            {planStatus === 'paused' && (
+                                <span className="ml-auto flex items-center gap-1 text-[10px] text-yellow-500/80">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500/70 animate-pulse" />
+                                    等待您的回复
                                 </span>
                             )}
                         </div>
 
-                        {/* Goal */}
-                        {currentPlan && (
-                            <p className="text-[11px] text-foreground/80 leading-snug">
-                                🎯 {currentPlan.goal}
-                            </p>
+                        {/* ── Generating skeleton ── */}
+                        {planStatus === 'generating' && !planState && (
+                            <div className="px-3 py-2.5 space-y-1.5">
+                                {[80, 60, 70].map((w, i) => (
+                                    <div key={i} className="relative h-2 rounded-full overflow-hidden bg-muted/30" style={{ width: `${w}%` }}>
+                                        <div className="absolute inset-0 rounded-full" style={{
+                                            background: 'linear-gradient(90deg, transparent 0%, hsl(var(--primary)/0.25) 50%, transparent 100%)',
+                                            animation: `agentShimmer 1.4s ease-in-out ${i * 0.2}s infinite`
+                                        }} />
+                                    </div>
+                                ))}
+                            </div>
                         )}
 
-                        {/* Steps list */}
-                        {planStatus === 'generating' && !currentPlan && (
-                            <p className="text-[10px] text-muted-foreground animate-pulse">正在生成执行计划…</p>
+                        {/* ── Goal ── */}
+                        {planState && (
+                            <div className="flex items-start gap-2 px-3 py-2 border-b border-border/10">
+                                <Target className="w-3 h-3 text-muted-foreground/40 flex-shrink-0 mt-0.5" />
+                                <span className="text-[11px] text-foreground/65 leading-snug">{planState.global_goal}</span>
+                            </div>
                         )}
-                        {currentPlan && (
-                            <div className="space-y-1">
-                                {currentPlan.steps.map((step, idx) => {
-                                    const isDone = planStatus === 'executing' && idx < currentStep;
-                                    const isCurrent = planStatus === 'executing' && idx === currentStep;
-                                    const isPending = idx > currentStep || planStatus === 'waiting';
+
+                        {/* ── Steps list ── */}
+                        {planState && (
+                            <div className="divide-y divide-border/10">
+                                {planState.plan.map((step) => {
+                                    const isCompleted = step.status === 'completed';
+                                    const isFailed = step.status === 'failed';
+                                    const isSkipped = step.status === 'skipped';
+                                    // in_progress but stopped → treat visually as interrupted
+                                    const isStopped = step.status === 'in_progress' && planStatus === 'stopped';
+                                    const isPaused = step.status === 'in_progress' && planStatus === 'paused';
+                                    const isActive = step.status === 'in_progress' && planStatus === 'executing';
+                                    const StepIcon = isCompleted ? CheckCircle2 : isFailed ? XCircle : (isActive || isPaused) ? Loader2 : isStopped ? Square : Circle;
+                                    const accentColor = isCompleted ? '#10b981' : isFailed ? '#ef4444' : isActive ? 'hsl(var(--primary))' : isPaused ? '#eab308' : 'transparent';
                                     return (
-                                        <div key={idx} className={cn(
-                                            "flex items-start gap-2 text-[11px] rounded px-1.5 py-0.5 transition-colors",
-                                            isCurrent && "bg-blue-500/10",
+                                        <div key={step.id} className={cn(
+                                            "relative flex items-start gap-2 pl-4 pr-3 py-2 text-[11px] transition-colors",
+                                            isActive && "bg-primary/5",
+                                            isPaused && "bg-yellow-500/5",
                                         )}>
-                                            <span className={cn(
-                                                "mt-0.5 w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold",
-                                                isDone && "bg-green-500/20 text-green-400",
-                                                isCurrent && "bg-blue-500/30 text-blue-300",
-                                                isPending && "bg-secondary/60 text-muted-foreground",
-                                            )}>
-                                                {isDone ? '✓' : isCurrent ? '▶' : idx + 1}
-                                            </span>
-                                            <span className={cn(
-                                                "leading-snug",
-                                                isDone && "text-muted-foreground line-through",
-                                                isCurrent && "text-foreground font-medium",
-                                                isPending && "text-muted-foreground",
-                                            )}>{step}</span>
+                                            {/* Left accent strip */}
+                                            <div
+                                                className="absolute left-0 top-0 bottom-0 w-0.5"
+                                                style={{ backgroundColor: accentColor }}
+                                            />
+                                            {/* Status icon */}
+                                            <StepIcon className={cn(
+                                                "w-3.5 h-3.5 flex-shrink-0 mt-0.5",
+                                                isCompleted && "text-green-400",
+                                                isFailed && "text-red-400",
+                                                isActive && "text-primary animate-spin",
+                                                isPaused && "text-yellow-500/70 animate-pulse",
+                                                isStopped && "text-muted-foreground/30",
+                                                isSkipped && "text-muted-foreground/25",
+                                                step.status === 'pending' && "text-muted-foreground/25",
+                                            )} />
+                                            <div className="flex-1 min-w-0">
+                                                {/* Step description */}
+                                                <span className={cn("leading-snug",
+                                                    isCompleted && "text-muted-foreground/50 line-through",
+                                                    isActive && "text-foreground font-medium",
+                                                    isPaused && "text-yellow-500/70 font-medium",
+                                                    isStopped && "text-muted-foreground/40",
+                                                    isFailed && "text-red-400/70",
+                                                    isSkipped && "text-muted-foreground/35 line-through",
+                                                    step.status === 'pending' && "text-muted-foreground/55",
+                                                )}>{step.description}</span>
+                                                {/* Command preview */}
+                                                {step.command && (isActive || isCompleted || isFailed || isStopped) && (
+                                                    <div className="flex items-center gap-1 mt-0.5 overflow-hidden">
+                                                        <Terminal className="w-2.5 h-2.5 text-muted-foreground/30 shrink-0" />
+                                                        <code className="text-[10px] font-mono text-muted-foreground/35 truncate">{step.command}</code>
+                                                    </div>
+                                                )}
+                                                {/* Result / error note */}
+                                                {isCompleted && step.result && (
+                                                    <p className="text-[10px] text-green-400/55 mt-0.5 leading-snug">{step.result}</p>
+                                                )}
+                                                {isFailed && step.error && (
+                                                    <p className="text-[10px] text-red-400/55 mt-0.5 leading-snug">{step.error}</p>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
                         )}
 
-                        {/* Overall progress bar (executing) */}
-                        {planStatus === 'executing' && currentPlan && (
-                            <div className="h-1 rounded-full bg-secondary/40 overflow-hidden">
+                        {/* ── Scratchpad (accumulated knowledge) ── */}
+                        {planState?.scratchpad && (
+                            <div className="flex items-start gap-1.5 px-3 py-2 border-t border-border/10">
+                                <Brain className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0 mt-0.5" />
+                                <p className="text-[10px] font-mono text-muted-foreground/35 leading-relaxed whitespace-pre-wrap">{planState.scratchpad}</p>
+                            </div>
+                        )}
+
+                        {/* ── Paused: reply hint ── */}
+                        {planStatus === 'paused' && (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border-t border-yellow-500/15 bg-yellow-500/5">
+                                <ChevronRight className="w-3 h-3 text-yellow-500/60 flex-shrink-0" />
+                                <span className="text-[10px] text-yellow-500/70">在下方输入框回复，计划将自动继续</span>
+                            </div>
+                        )}
+
+                        {/* ── Progress bar (executing only) ── */}
+                        {planState && (planStatus === 'executing' || planStatus === 'stopped') && (
+                            <div className="h-0.5 bg-muted/20 overflow-hidden">
                                 <div
-                                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                                    className={cn("h-full transition-all duration-700", planStatus === 'stopped' ? "bg-muted-foreground/20" : "bg-primary/40")}
                                     style={{
-                                        width: `${Math.min(
-                                            ((currentStep + 1) / currentPlan.steps.length) * 100,
-                                            100
+                                        width: `${Math.round(
+                                            (planState.plan.filter(s => s.status === 'completed' || s.status === 'skipped').length
+                                                / planState.plan.length) * 100
                                         )}%`
                                     }}
                                 />
@@ -894,7 +1160,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         className={cn(
                             "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border",
                             planMode
-                                ? "bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30"
+                                ? "bg-primary/15 text-primary border-primary/30 hover:bg-primary/25"
                                 : "bg-secondary/50 hover:bg-secondary/80 text-muted-foreground border-border/40"
                         )}
                     >
