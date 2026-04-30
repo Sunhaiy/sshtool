@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./b0e89111-1d1b-4072-adea-1dd2ec06831e.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./1e403064-c046-4948-b229-202b99ed692a.png" />
-      <img alt="Reflex main workspace" src="./b0e89111-1d1b-4072-adea-1dd2ec06831e.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./b1405725-c357-41d1-ac57-43db4634bc16.png" />
+      <img alt="Reflex main workspace" src="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -110,24 +110,10 @@ It combines a polished terminal workspace with practical infrastructure tools an
 
 ## Screenshots
 
-### Agent Deployment Workspace
+### Agent Workspace
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./58beebfc-909a-4a29-adc6-6eb42f36bb50.png" />
-    <source media="(prefers-color-scheme: light)" srcset="./1e44b065-2b41-4316-8d5f-157bf1323034.png" />
-    <img alt="Reflex agent deployment workspace" src="./58beebfc-909a-4a29-adc6-6eb42f36bb50.png" width="100%" />
-  </picture>
-</p>
-
-### Agent Conversation And Execution Flow
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png" />
-    <source media="(prefers-color-scheme: light)" srcset="./22174f5b-d599-4a23-a2ee-b738d1b821c7.png" />
-    <img alt="Reflex agent conversation and execution flow" src="./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png" width="100%" />
-  </picture>
+  <img alt="Reflex agent workspace" src="./8f7048de-4753-4ca9-b5be-72905c9f334d.png" width="100%" />
 </p>
 
 ## Quick Start

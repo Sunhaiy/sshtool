@@ -29,10 +29,11 @@ def main() -> None:
 
     source = Image.open(SOURCE_LOGO).convert("RGBA")
 
-    # Keep visible transparent padding around the rounded square so Windows
-    # small-size icons still read as rounded instead of filling the whole box.
-    app_icon = create_padded_icon(source, canvas_size=1024, scale=0.78)
-    tray_icon = create_padded_icon(source, canvas_size=256, scale=0.7)
+    # Keep only a slim transparent edge so the rounded white card stays readable
+    # in Windows taskbar, desktop, and tray contexts without making the core mark
+    # feel undersized.
+    app_icon = create_padded_icon(source, canvas_size=1024, scale=0.9)
+    tray_icon = create_padded_icon(source, canvas_size=256, scale=0.88)
 
     app_icon.save(APP_ICON_PATH)
     tray_icon.save(TRAY_ICON_PATH)
