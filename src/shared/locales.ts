@@ -83,12 +83,14 @@ export const translations = {
         },
         connection: {
             new: 'New Connection',
+            add: 'Add Server',
             host: 'Host',
             port: 'Port',
             username: 'Username',
             password: 'Password',
             name: 'Name',
-            noConnections: 'No connections found. Create one to get started.'
+            noConnections: 'No connections found. Create one to get started.',
+            noConnectionsDesc: 'Add your first SSH server and start remote management.'
         },
         agent: {
             thinking: 'Thinking...',
@@ -229,12 +231,14 @@ export const translations = {
         },
         connection: {
             new: '新建连接',
+            add: '添加服务器',
             host: '主机',
             port: '端口',
             username: '用户名',
             password: '密码',
             name: '名称',
-            noConnections: '未找到连接。创建一个以开始。'
+            noConnections: '未找到连接。创建一个以开始。',
+            noConnectionsDesc: '添加你的第一个 SSH 服务器，开始远程管理。'
         },
         agent: {
             thinking: '正在思考...',
@@ -375,12 +379,14 @@ export const translations = {
         },
         connection: {
             new: '新規接続',
+            add: 'サーバーを追加',
             host: 'ホスト',
             port: 'ポート',
             username: 'ユーザー名',
             password: 'パスワード',
             name: '名前',
-            noConnections: '接続が見つかりません。新しい接続を作成してください。'
+            noConnections: '接続が見つかりません。新しい接続を作成してください。',
+            noConnectionsDesc: '最初のSSHサーバーを追加して、リモート管理を開始しましょう。'
         },
         agent: {
             thinking: '考え中...',
@@ -521,12 +527,14 @@ export const translations = {
         },
         connection: {
             new: '새 연결',
+            add: '서버 추가',
             host: '호스트',
             port: '포트',
             username: '사용자 이름',
             password: '비밀번호',
             name: '이름',
-            noConnections: '연결을 찾을 수 없습니다. 시작하려면 연결을 생성하세요.'
+            noConnections: '연결을 찾을 수 없습니다. 시작하려면 연결을 생성하세요.',
+            noConnectionsDesc: '첫 번째 SSH 서버를 추가하고 원격 관리를 시작하세요.'
         },
         agent: {
             thinking: '생각 중...',
